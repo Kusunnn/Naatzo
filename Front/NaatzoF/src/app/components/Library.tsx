@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BookOpen, ExternalLink, Search, Library as LibraryIcon } from 'lucide-react';
 import { apiRequest } from '../services/api';
 
@@ -15,14 +15,25 @@ export function Library() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [page, setPage] = useState(1);
+  const [count, setCount] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [stale, setStale] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
 
     const loadBooks = async () => {
       try {
-        const payload = await apiRequest<{ books: LibraryBook[] }>(
-          `/books/search?q=${encodeURIComponent(searchQuery)}&limit=24`
+        const payload = await apiRequest<{ books: LibraryBook[]; count: number; hasNext: boolean; stale?: boolean }>(
+          `/books/search?q=${encodeURIComponent(searchQuery)}&page=${page}&topic=${selectedCategory === 'all' ? '' : encodeURIComponent(selectedCategory)}`,
+          { signal: controller.signal }
         );
 
         if (!isMounted) {
@@ -30,35 +41,33 @@ export function Library() {
         }
 
         setBooks(payload.books || []);
-      } catch {
+        setCount(payload.count);
+        setHasNext(payload.hasNext);
+        setStale(Boolean(payload.stale));
+      } catch (error) {
         if (isMounted) {
           setBooks([]);
+          setError(error instanceof Error ? error.message : 'No se pudo consultar Gutenberg. Intenta nuevamente.');
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
-    void loadBooks();
+    const timer = window.setTimeout(() => void loadBooks(), 350);
 
     return () => {
       isMounted = false;
+      window.clearTimeout(timer);
+      controller.abort();
     };
-  }, [searchQuery]);
+  }, [searchQuery, selectedCategory, page, retry]);
 
-  const categories = useMemo(
-    () => [
-      'all',
-      ...Array.from(new Set(books.map((book) => (book.topics?.[0] || 'General').toLowerCase()))),
-    ],
-    [books]
-  );
-
-  const filteredBooks = books.filter(book => {
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         book.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const category = (book.topics?.[0] || 'General').toLowerCase();
-    const matchesCategory = selectedCategory === 'all' || category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const categories = [
+    ['all', 'Todos'], ['calculus', 'Cálculo'], ['mathematics', 'Matemáticas'],
+    ['physics', 'Física'], ['chemistry', 'Química'], ['biology', 'Biología'],
+    ['history', 'Historia'], ['literature', 'Literatura'], ['philosophy', 'Filosofía'],
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary via-background to-secondary p-4 md:p-8">
@@ -81,30 +90,33 @@ export function Library() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título o autor..."
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              placeholder="Buscar título, autor o tema (por ejemplo, cálculo)..."
               className="w-full pl-12 pr-4 py-3 bg-card rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-ring transition-all shadow-sm"
             />
           </div>
 
           <div className="flex gap-2 flex-wrap">
-            {categories.map((category) => (
+            {categories.map(([category, label]) => (
               <button
                 key={category}
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => { setSelectedCategory(category); setSearchQuery(''); setPage(1); }}
                 className={`px-4 py-2 rounded-xl transition-all font-medium ${
                   selectedCategory === category
                     ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
                     : 'bg-secondary text-foreground hover:bg-muted hover:shadow-sm'
                 }`}
               >
-                    {category === 'all' ? 'Todos' : category.charAt(0).toUpperCase() + category.slice(1)}
+                    {label}
               </button>
             ))}
           </div>
         </div>
 
-        {filteredBooks.length === 0 ? (
+        {!loading && !error && stale && <p role="status" className="mb-4 text-muted-foreground">Gutenberg no respondió. Mostramos la última página guardada temporalmente.</p>}
+        {loading ? <p role="status">Consultando Gutenberg… Si tarda, reintentaremos automáticamente.</p> : error ? (
+          <div role="alert"><p>{error}</p><button className="mt-3 text-primary underline" onClick={() => setRetry(value => value + 1)}>Reintentar</button></div>
+        ) : books.length === 0 ? (
           <div className="bg-card rounded-3xl shadow-xl border border-border p-12 text-center">
             <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-foreground mb-2">No se encontraron libros</h2>
@@ -114,7 +126,7 @@ export function Library() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredBooks.map((book) => (
+            {books.map((book) => (
               <a
                 key={book.id}
                 href={book.pdfLink}
@@ -126,6 +138,7 @@ export function Library() {
                   <img
                     src={book.cover}
                     alt={book.title}
+                    loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 </div>
@@ -145,6 +158,13 @@ export function Library() {
               </a>
             ))}
           </div>
+        )}
+        {!loading && !error && count > 0 && (
+          <nav aria-label="Páginas de la biblioteca" className="mt-8 flex flex-wrap items-center justify-between gap-4">
+            <button disabled={page === 1} onClick={() => setPage(value => value - 1)} className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-40">Anterior</button>
+            <span aria-live="polite">Página {page} de {Math.ceil(count / 32)} · {count.toLocaleString('es-MX')} libros</span>
+            <button disabled={!hasNext} onClick={() => setPage(value => value + 1)} className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-40">Siguiente</button>
+          </nav>
         )}
       </div>
     </div>

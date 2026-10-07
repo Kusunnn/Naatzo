@@ -1,5 +1,5 @@
 import { useTasks } from '../contexts/TaskContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BookOpen, ExternalLink, Calendar, Lightbulb } from 'lucide-react';
@@ -12,22 +12,26 @@ interface RecommendedBook {
   author: string;
   cover: string;
   pdfLink: string;
+  reason?: string;
 }
 
 interface TaskRecommendation {
   bestDay: string;
   recommendations: RecommendedBook[];
+  error?: string;
 }
 
 export function Recommendations() {
   const { tasks } = useTasks();
-  const incompleteTasks = tasks.filter(task => !task.completed);
+  const incompleteTasks = useMemo(() => tasks.filter(task => !task.completed), [tasks]);
   const [recommendationByTask, setRecommendationByTask] = useState<Record<string, TaskRecommendation>>({});
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadRecommendations = async () => {
+      setIsLoading(true);
       const entries = await Promise.all(
         incompleteTasks.map(async (task) => {
           try {
@@ -41,6 +45,7 @@ export function Recommendations() {
               {
                 bestDay: 'Hoy',
                 recommendations: [],
+                error: 'No se pudo consultar Gutenberg. Vuelve a entrar para intentarlo nuevamente.',
               },
             ] as const;
           }
@@ -52,6 +57,7 @@ export function Recommendations() {
       }
 
       setRecommendationByTask(Object.fromEntries(entries));
+      setIsLoading(false);
     };
 
     void loadRecommendations();
@@ -133,6 +139,11 @@ export function Recommendations() {
                       </div>
                     </div>
 
+                    {recommendedBooks.length === 0 && (
+                      <p className="text-muted-foreground" role="status">
+                        {isLoading ? 'Buscando libros relacionados en Gutenberg…' : taskRecommendation?.error || 'No encontramos libros relacionados en Gutenberg para esta tarea. Su catálogo no cubre todos los temas.'}
+                      </p>
+                    )}
                     {recommendedBooks.length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-4">
@@ -144,6 +155,8 @@ export function Recommendations() {
                             <a
                               key={book.id}
                               href={book.pdfLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="flex gap-4 bg-input-background rounded-lg p-4 border border-border hover:shadow-md transition-shadow group"
                             >
                               <img
@@ -156,9 +169,10 @@ export function Recommendations() {
                                   {book.title}
                                 </h4>
                                 <p className="text-muted-foreground mt-1">{book.author}</p>
+                                <p className="text-muted-foreground mt-2 text-sm">{book.reason}</p>
                                 <div className="flex items-center gap-2 mt-3 text-primary">
                                   <ExternalLink className="w-4 h-4" />
-                                  <span>Ver PDF</span>
+                                  <span>Leer en Gutenberg</span>
                                 </div>
                               </div>
                             </a>

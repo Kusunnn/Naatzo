@@ -1,0 +1,17 @@
+.chatbot-markdown { min-width: 0; overflow-wrap: anywhere; line-height: 1.6; }
+.chatbot-markdown > * + * { margin-top: 0.75rem; }
+.chatbot-markdown h1, .chatbot-markdown h2, .chatbot-markdown h3,
+.chatbot-markdown h4, .chatbot-markdown h5, .chatbot-markdown h6 { font-size: 1em; font-weight: 700; }
+.chatbot-markdown ul { list-style: disc; padding-left: 1.5rem; }
+.chatbot-markdown ol { list-style: decimal; padding-left: 1.5rem; }
+.chatbot-markdown li + li { margin-top: 0.25rem; }
+.chatbot-markdown li > p + p { margin-top: 0.5rem; }
+.chatbot-markdown a { color: var(--primary); text-decoration: underline; }
+.chatbot-markdown blockquote { border-left: 3px solid var(--primary); padding-left: 0.75rem; }
+.chatbot-markdown code { font-family: monospace; background: var(--muted); border-radius: 0.25rem; padding: 0.1rem 0.25rem; }
+.chatbot-markdown pre { max-width: 100%; overflow-x: auto; background: var(--muted); padding: 0.75rem; border-radius: 0.5rem; }
+.chatbot-markdown pre code { padding: 0; }
+.chatbot-table { max-width: 100%; overflow-x: auto; }
+.chatbot-markdown table { border-collapse: collapse; width: 100%; }
+.chatbot-markdown th, .chatbot-markdown td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+.chatbot-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }

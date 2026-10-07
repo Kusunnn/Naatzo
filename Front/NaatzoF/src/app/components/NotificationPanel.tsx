@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../contexts/TaskContext';
-import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Bell, Clock, AlertCircle, BookOpen, ExternalLink } from 'lucide-react';
 import { ElephantMascot } from './ElephantMascot';
 import { motion, AnimatePresence } from 'motion/react';
-import { apiRequest } from '../services/api';
 
 interface BackendNotification {
   taskId: string;
@@ -32,62 +30,33 @@ interface NotificationPanelProps {
 
 export function NotificationPanel({ isMobile = false }: NotificationPanelProps) {
   const { tasks } = useTasks();
-  const { user } = useAuth();
-  const [backendNotifications, setBackendNotifications] = useState<BackendNotification[]>([]);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadNotifications = async () => {
-      if (!user?.id) {
-        setBackendNotifications([]);
-        return;
-      }
-
-      try {
-        const payload = await apiRequest<{ notifications: BackendNotification[] }>(
-          `/notifications/${encodeURIComponent(user.id)}`
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        setBackendNotifications(payload.notifications || []);
-      } catch {
-        if (isMounted) {
-          setBackendNotifications([]);
-        }
-      }
-    };
-
-    void loadNotifications();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [tasks, user?.id]);
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const notifications = useMemo(
     () =>
-      backendNotifications.map((item) => {
-        const reminder = item.reminders[0];
-        const urgency: 'high' | 'medium' = reminder?.key === '1h' || reminder?.key === '4h' ? 'high' : 'medium';
+      tasks
+      .filter(task => !task.completed && Number.isFinite(task.dueDate.getTime()) && task.dueDate.getTime() <= now + 3 * 24 * 60 * 60 * 1000)
+      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+      .map((task) => {
+        const remaining = task.dueDate.getTime() - now;
+        const urgency: 'high' | 'medium' = remaining <= 24 * 60 * 60 * 1000 ? 'high' : 'medium';
 
         return {
-          id: `${item.taskId}-${reminder?.key || 'due'}`,
-          task: {
-            title: item.taskTitle,
-            dueDate: new Date(item.dueAt),
-          },
+          id: task.id,
+          task,
           urgency,
-          message: reminder
-            ? `Recordatorio ${reminder.label}: prioriza esta tarea ahora.`
-            : 'Tienes una tarea próxima a vencer.',
-          recommendedBook: item.recommendation,
+          message: remaining < 0 ? 'Esta tarea está vencida.' : remaining <= 24 * 60 * 60 * 1000
+            ? `Vence en ${Math.max(1, Math.ceil(remaining / (60 * 60 * 1000)))} hora(s).`
+            : `Vence en ${Math.ceil(remaining / (24 * 60 * 60 * 1000))} días.`,
+          recommendedBook: null as BackendNotification['recommendation'],
         };
       }),
-    [backendNotifications]
+    [tasks, now]
   );
 
   return (
@@ -99,9 +68,10 @@ export function NotificationPanel({ isMobile = false }: NotificationPanelProps) 
             <Bell className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-foreground">Notificaciones</h2>
+            <h2 className="text-foreground">Tareas próximas</h2>
             <p className="text-muted-foreground">
               {notifications.length} {notifications.length === 1 ? 'recordatorio' : 'recordatorios'}
+              {' · Próximos 3 días y vencidas'}
             </p>
           </div>
         </div>
@@ -120,7 +90,7 @@ export function NotificationPanel({ isMobile = false }: NotificationPanelProps) 
                 <ElephantMascot size="large" />
               </div>
               <p className="text-muted-foreground">
-                ¡Todo bajo control! No hay recordatorios urgentes.
+                No hay tareas pendientes para los próximos 3 días ni tareas vencidas.
               </p>
             </motion.div>
           ) : (

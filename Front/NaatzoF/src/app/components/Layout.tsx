@@ -31,7 +31,7 @@ export function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`min-h-screen bg-background ${location.pathname === '/chatbot' ? 'mx-auto w-full max-w-[1340px]' : ''}`}>
       <Navbar />
       <main>
         <Outlet />

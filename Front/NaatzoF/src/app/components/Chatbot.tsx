@@ -6,6 +6,12 @@ import { ElephantMascot } from './ElephantMascot';
 import { NotificationPanel } from './NotificationPanel';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiRequest } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import './ChatbotMarkdown.css';
 
 interface Message {
   id: string;
@@ -130,9 +136,9 @@ export function Chatbot() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary via-background to-secondary">
-      <div className="h-[calc(100vh-64px)] flex relative">
-        <div className="flex-1 flex flex-col bg-background/50 backdrop-blur-sm">
+    <div className="bg-background">
+      <div className="h-[calc(100dvh-4rem)] max-h-[900px] min-h-[360px] flex relative overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-background">
           <div className="p-4 md:p-6 border-b border-border bg-card shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -158,7 +164,7 @@ export function Chatbot() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
             {messages.map((message) => (
               <motion.div
                 key={message.id}
@@ -178,7 +184,26 @@ export function Chatbot() {
                       : 'bg-secondary text-foreground border border-border'
                   }`}
                 >
-                  <p className="whitespace-pre-line text-sm md:text-base">{message.text}</p>
+                  {message.sender === 'bot' ? (
+                    <div className="chatbot-markdown text-sm md:text-base">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          a: ({ children, ...props }) => (
+                            <a {...props} target="_blank" rel="noopener noreferrer">{children}</a>
+                          ),
+                          table: ({ children, ...props }) => (
+                            <div className="chatbot-table"><table {...props}>{children}</table></div>
+                          ),
+                        }}
+                      >
+                        {message.text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-line break-words text-sm md:text-base">{message.text}</p>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -220,7 +245,7 @@ export function Chatbot() {
         </div>
 
         {/* Panel de notificaciones desktop */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block shrink-0">
           <NotificationPanel />
         </div>
 
