@@ -1,18 +1,69 @@
-# Build and Release Folders
-bin-debug/
-bin-release/
-[Oo]bj/
-[Bb]in/
+# Dependencias
+node_modules/
+.pnp.*
 
-# Other files and folders
-.settings/
+# Compilacion y pruebas
+dist/
+build/
+.vite/
+.turbo/
+.next/
+out/
+coverage/
+.nyc_output/
+*.tsbuildinfo
 
-# Executables
-*.swf
-*.air
-*.ipa
-*.apk
+# Credenciales y configuracion local
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
 
-# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
-# should NOT be excluded as they contain compiler settings and other important
-# information for Eclipse / Flash Builder.
+# Datos locales: usuarios, contrasenas, conversaciones y archivos subidos
+/Back/*/data/*.json
+/Back/*/chatbot-service/data/*.json
+uploads/
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.db-journal
+*.dump
+*.backup
+
+# Logs, caches y temporales
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cache/
+.npm-cache/
+.eslintcache
+.parcel-cache/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# Configuracion local de herramientas
+.vercel/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Se conservan package-lock.json, pnpm-lock.yaml, migraciones SQL y .env.example.
