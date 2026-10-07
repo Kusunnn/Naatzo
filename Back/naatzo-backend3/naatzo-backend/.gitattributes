@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# La guia para el Bloc de notas va con saltos de linea de Windows
+*.txt text eol=crlf
+*.pdf binary

@@ -1,0 +1,149 @@
+﻿NAATZO BACKEND - CÓMO USARLO SIN DOCKER
+============================================================
+
+Esta guía explica, paso a paso, cómo levantar el backend en tu
+computadora sin Docker. La guía completa (qué hace el backend y
+este mismo paso a paso) está en Naatzo_Backend_Guia.pdf.
+
+
+PASO 1. INSTALA LO NECESARIO
+----------------------------
+  - Node.js 20.19 o más nuevo. Recomendado: la versión LTS de nodejs.org.
+  - PostgreSQL 13 o más nuevo. En Windows, el instalador de postgresql.org. Durante la instalación anota la contraseña del usuario postgres y deja el puerto 5432. Si no quieres instalarlo, puedes usar Supabase (Paso 4B).
+  - Opcional: Git Bash (viene con Git para Windows), para correr el script de demo.
+Comprueba Node en una terminal:
+
+      node -v
+      npm -v
+
+
+PASO 2. DESCOMPRIME EL PROYECTO
+-------------------------------
+  - Descomprime naatzo-backend.zip, por ejemplo en el Escritorio. Queda la carpeta naatzo-backend.
+  - Abre una terminal dentro de esa carpeta. En Windows: entra a la carpeta en el Explorador, escribe powershell en la barra de dirección y presiona Enter. En Mac o Linux: abre Terminal y usa cd.
+
+PASO 3. INSTALA LAS DEPENDENCIAS
+--------------------------------
+
+      npm install
+
+Tarda uno o dos minutos y crea la carpeta node_modules.
+
+PASO 4A. CREA LA BASE DE DATOS (POSTGRES EN TU COMPUTADORA)
+-----------------------------------------------------------
+Con pgAdmin: clic derecho en Databases > Create > Database, y ponle de nombre naatzo.
+O desde PowerShell (cambia 17 por tu versión de Postgres; te pide la contraseña de postgres):
+
+      & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -c "CREATE DATABASE naatzo"
+
+En Mac o Linux:
+
+      createdb -U postgres naatzo
+
+
+PASO 4B. (ALTERNATIVA) USA SUPABASE EN LUGAR DE POSTGRES LOCAL
+--------------------------------------------------------------
+  - En Supabase: Project Settings > Database > Connection string > Session pooler, y copia la URL.
+  - En el .env (Paso 5) pon esa URL en DATABASE_URL y DATABASE_SSL=true.
+  - Si es el mismo proyecto de Supabase de KIBO 1, agrega DB_SCHEMA=naatzo para que las tablas queden aparte.
+
+PASO 5. CONFIGURA EL ARCHIVO .ENV
+---------------------------------
+Copia la plantilla y ábrela con el Bloc de notas:
+
+      Copy-Item .env.example .env
+      notepad .env
+
+(En cmd es copy .env.example .env; en Mac o Linux, cp .env.example .env.) Cambia como mínimo:
+
+      DATABASE_URL=postgres://postgres:TU_CONTRASENA@localhost:5432/naatzo
+      DATABASE_SSL=false
+      JWT_SECRET=escribe-aqui-un-texto-largo-de-al-menos-16-caracteres
+      DEMO_MODE=true
+
+  - Si tu contraseña tiene caracteres especiales, escríbelos codificados: @ es %40, # es %23, : es %3A, / es %2F y ? es %3F.
+  - Las llaves (LLM_API_KEY, GITHUB_TOKEN, DISCORD_WEBHOOK_URL) pueden quedar vacías: el backend usa respuestas de ejemplo y guarda los avisos para mostrarlos en pantalla.
+  - Al guardar, el archivo debe llamarse .env y no .env.txt. En el Bloc de notas elige "Todos los archivos" en el tipo.
+
+PASO 6. CREA LAS TABLAS
+-----------------------
+
+      npm run migrate
+
+Debe decir: [migrate] 7 migracion(es) aplicada(s) en el esquema public. Si lo corres otra vez dice "La base ya estaba al dia"; no borra nada.
+
+PASO 7. ARRANCA EL SERVIDOR
+---------------------------
+
+      npm start
+
+(npm run dev hace lo mismo y además se reinicia solo cuando editas el código.) Debe mostrar:
+
+      [naatzo] API escuchando en http://localhost:4000
+      [naatzo] LLM: mock | demo: true
+      [riesgos] Revision programada: */10 * * * *
+
+Deja esa terminal abierta mientras lo usas. Para detenerlo: Ctrl + C.
+
+PASO 8. COMPRUEBA QUE FUNCIONA
+------------------------------
+Abre en el navegador:
+  - http://localhost:4000/api/health: debe responder {"ok":true,...}
+  - http://localhost:4000/api/health/db: debe decir "conectada"
+  - http://localhost:4000/api/health/integrations: qué está configurado (mock, GitHub, Discord)
+La raíz http://localhost:4000 solo dice que la API está arriba: es un backend, no tiene páginas.
+
+PASO 9. CORRE LA DEMO COMPLETA
+------------------------------
+En otra terminal (en Windows, Git Bash), dentro de la carpeta naatzo-backend:
+
+      bash scripts/demo.sh
+
+Recorre todo el flujo y lo muestra en pantalla. Crea dos usuarios de prueba:
+  - Dueño: demo@naatzo.dev / naatzo-demo-123
+  - Miembro: laura@naatzo.dev / laura-demo-123
+
+PASO 10. ÚSALO DESDE POSTMAN, THUNDER CLIENT O EL FRONTEND
+----------------------------------------------------------
+  - Regístrate: POST http://localhost:4000/api/auth/register con el JSON {"name":"Tu nombre","email":"tu@correo.com","password":"minimo8caracteres"}. Regresa un token.
+  - En las demás peticiones agrega el header Authorization: Bearer <token>.
+  - Atajo: POST /api/demo/seed carga un equipo de 4 personas y la minuta de ejemplo.
+  - Después: POST /api/projects/:id/runs arranca a los agentes, y GET /api/projects/:id/board muestra el tablero.
+  - En PowerShell, para los ejemplos con curl usa curl.exe (no curl).
+
+PASO 11 (OPCIONAL). USAR LLAVES REALES
+--------------------------------------
+  - Gemini: LLM_API_KEY, una llave de Google AI Studio.
+  - GitHub: GITHUB_TOKEN (fine-grained, con permiso para crear repositorios y escribir contenido), GITHUB_OWNER y GITHUB_OWNER_TYPE (org o user).
+  - Discord: DISCORD_WEBHOOK_URL (Ajustes del canal > Integraciones > Webhooks).
+  - Reinicia el servidor después de editar el .env (Ctrl + C y npm start), y revisa /api/health/integrations.
+  - No subas el .env a GitHub ni lo pegues en el chat del grupo: ahí van las llaves.
+
+PROBLEMAS COMUNES
+-----------------
+  * "node" no se reconoce como comando
+    Node no está instalado, o la terminal se abrió antes de instalarlo. Ciérrala y ábrela de nuevo.
+  * [env] Configuracion invalida
+    Falta o está mal una variable del .env. El mensaje dice cuál.
+  * ECONNREFUSED ... 5432
+    Postgres no está corriendo. Win + R, services.msc, e inicia el servicio postgresql-x64-XX.
+  * password authentication failed
+    La contraseña en DATABASE_URL no es la del usuario postgres.
+  * database "naatzo" does not exist
+    Falta crear la base (Paso 4A).
+  * EADDRINUSE ... 4000
+    El puerto 4000 ya está ocupado (otro servidor abierto). Ciérralo o cambia PORT en el .env.
+  * Errores de SSL o certificado
+    En Postgres local usa DATABASE_SSL=false; en Supabase, true.
+  * El frontend da error de CORS
+    Agrega su dirección a CORS_ORIGINS (separadas por coma) y reinicia.
+  * ERR_REQUIRE_ESM u otro error raro al arrancar
+    Tu Node es más viejo que 20.19. Actualízalo.
+
+ACTUALIZAR A UNA VERSIÓN NUEVA DEL ZIP
+--------------------------------------
+  1. Reemplaza los archivos con los del ZIP nuevo, pero conserva tu .env.
+  2. npm install
+  3. npm run migrate (aplica solo las migraciones nuevas; no borra tus datos)
+  4. npm start
+
