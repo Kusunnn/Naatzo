@@ -22,7 +22,7 @@ export function Library() {
     const loadBooks = async () => {
       try {
         const payload = await apiRequest<{ books: LibraryBook[] }>(
-          `/books/search?q=${encodeURIComponent(searchQuery || 'productividad')}&limit=24`
+          `/books/search?q=${encodeURIComponent(searchQuery)}&limit=24`
         );
 
         if (!isMounted) {
@@ -71,7 +71,7 @@ export function Library() {
             Biblioteca Digital
           </h1>
           <p className="text-muted-foreground">
-            Explora nuestra colección de libros y recursos
+            Explora libros de dominio público disponibles en Project Gutenberg
           </p>
         </div>
 
@@ -118,6 +118,8 @@ export function Library() {
               <a
                 key={book.id}
                 href={book.pdfLink}
+                target="_blank"
+                rel="noreferrer"
                 className="bg-card rounded-3xl shadow-xl border border-border overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1 group"
               >
                 <div className="aspect-[2/3] overflow-hidden bg-muted">
@@ -137,7 +139,7 @@ export function Library() {
                   </span>
                   <div className="flex items-center gap-2 mt-3 text-primary">
                     <ExternalLink className="w-4 h-4" />
-                    <span>Ver PDF</span>
+                    <span>Leer en Gutenberg</span>
                   </div>
                 </div>
               </a>

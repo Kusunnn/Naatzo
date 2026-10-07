@@ -1,35 +1,54 @@
-const { openLibraryBaseUrl } = require("../config/env");
+const GUTENDEX_BASE_URL =
+  process.env.GUTENDEX_BASE_URL || "https://gutendex.com/books/";
 
-function normalizeBook(doc) {
-  const coverId = doc.cover_i;
-  const cover = coverId
-    ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+function normalizeBook(book) {
+  const formats = book.formats || {};
+  const cover = formats["image/jpeg"]
+    ? formats["image/jpeg"]
     : "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=400&q=80";
 
+  // Prefer an HTML reader, then EPUB, and finally plain text. Gutenberg
+  // exposes these links in the formats object for each public-domain book.
+  const pdfLink =
+    formats["text/html"] ||
+    formats["application/epub+zip"] ||
+    formats["text/plain"] ||
+    `https://www.gutenberg.org/ebooks/${book.id}`;
+
   return {
-    id: doc.key || doc.cover_edition_key || doc.edition_key?.[0] || doc.title,
-    title: doc.title || "Sin titulo",
-    author: Array.isArray(doc.author_name) ? doc.author_name[0] : "Autor desconocido",
+    id: String(book.id),
+    title: book.title || "Sin titulo",
+    author: Array.isArray(book.authors) && book.authors[0]
+      ? book.authors[0].name
+      : "Autor desconocido",
     cover,
-    pdfLink: Array.isArray(doc.ia)
-      ? `https://archive.org/details/${doc.ia[0]}`
-      : `https://openlibrary.org${doc.key}`,
-    topics: Array.isArray(doc.subject) ? doc.subject.slice(0, 5) : [],
+    pdfLink,
+    topics: Array.isArray(book.subjects) ? book.subjects.slice(0, 5) : [],
   };
 }
 
 async function searchBooks({ query, limit = 12 }) {
-  const safeQuery = encodeURIComponent(query || "productividad");
-  const url = `${openLibraryBaseUrl}/search.json?q=${safeQuery}&limit=${Math.max(1, Math.min(limit, 30))}`;
+  const safeLimit = Math.max(1, Math.min(limit, 32));
+  const params = new URLSearchParams({
+    page: "1",
+  });
+
+  if (query && query.trim()) {
+    params.set("search", query.trim());
+  } else {
+    params.set("sort", "popular");
+  }
+
+  const url = `${GUTENDEX_BASE_URL}?${params.toString()}`;
 
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Open Library error: ${response.status}`);
+    throw new Error(`Project Gutenberg error: ${response.status}`);
   }
 
   const payload = await response.json();
-  const docs = Array.isArray(payload.docs) ? payload.docs : [];
-  return docs.slice(0, limit).map(normalizeBook);
+  const books = Array.isArray(payload.results) ? payload.results : [];
+  return books.slice(0, safeLimit).map(normalizeBook);
 }
 
 function calculateBestDay(dueAtIso) {
