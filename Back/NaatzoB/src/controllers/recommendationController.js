@@ -1,12 +1,13 @@
 const { readDb } = require("../repositories/dbRepository");
 const { HttpError } = require("../utils/httpError");
-const { searchBooks, calculateBestDay, keywordFromTask } = require("../services/bookService");
+const { recommendBooks, calculateBestDay } = require("../services/bookService");
 
 async function byTask(req, res, next) {
   try {
     const { taskId, taskTitle, dueAt, limit } = req.query;
     let resolvedTitle = taskTitle;
     let resolvedDueAt = dueAt;
+    let resolvedDescription = String(req.query.taskDescription || '');
 
     if (taskId) {
       const db = await readDb();
@@ -16,14 +17,16 @@ async function byTask(req, res, next) {
       }
       resolvedTitle = task.title;
       resolvedDueAt = task.dueAt;
+      resolvedDescription = task.description || '';
     }
 
     if (!resolvedTitle) {
       throw new HttpError(400, "Proporciona taskId o taskTitle");
     }
 
-    const books = await searchBooks({
-      query: keywordFromTask(resolvedTitle),
+    const books = await recommendBooks({
+      title: String(resolvedTitle),
+      description: resolvedDescription,
       limit: Number(limit || 5),
     });
 
