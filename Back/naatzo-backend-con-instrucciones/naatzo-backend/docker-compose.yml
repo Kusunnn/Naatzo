@@ -1,0 +1,47 @@
+# Levanta Postgres y la API de Naatzo con un solo comando:
+#   docker compose up --build
+# La API queda en http://localhost:4000 en modo demo y, sin llaves, con el LLM en mock.
+# Las llaves opcionales (LLM_API_KEY, GITHUB_TOKEN, DISCORD_WEBHOOK_URL...) se toman
+# del archivo .env de esta carpeta si existe.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: naatzo
+      POSTGRES_PASSWORD: naatzo
+      POSTGRES_DB: naatzo
+    volumes:
+      - naatzo_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naatzo"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: .
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://naatzo:naatzo@db:5432/naatzo
+      DATABASE_SSL: "false"
+      DB_SCHEMA: public
+      JWT_SECRET: ${JWT_SECRET:-secreto-local-de-naatzo-para-docker}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL_FAST: ${LLM_MODEL_FAST:-gemini-3.5-flash-lite}
+      LLM_MODEL_SMART: ${LLM_MODEL_SMART:-gemini-3.8-flash}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_OWNER_TYPE: ${GITHUB_OWNER_TYPE:-org}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+
+volumes:
+  naatzo_db:

@@ -1,0 +1,199 @@
+NAATZO BACKEND - PASOS PARA PROBAR SIN DOCKER
+================================================
+
+Este archivo explica como levantar el backend si NO tienes Docker.
+No necesitas llaves de Gemini, GitHub ni Discord para probar el flujo de demo.
+
+REQUISITOS
+----------
+1. Node.js 20.19 o superior.
+   Compruebalo con:
+
+   node -v
+
+2. PostgreSQL 13 o superior instalado y corriendo.
+
+3. Para correr scripts/demo.sh en Windows: Git Bash.
+   Tambien necesitas curl, que normalmente ya viene en Windows moderno y en Git Bash.
+
+
+PASO 1 - DESCOMPRIME EL PROYECTO
+--------------------------------
+Extrae naatzo-backend y abre una terminal dentro de esa carpeta.
+
+
+PASO 2 - INSTALA LAS DEPENDENCIAS
+----------------------------------
+Ejecuta:
+
+   npm install
+
+
+PASO 3 - CREA UNA BASE DE DATOS EN POSTGRESQL
+----------------------------------------------
+Crea una base llamada:
+
+   naatzo
+
+Puedes hacerlo desde pgAdmin o con psql.
+
+Ejemplo con psql:
+
+   psql -U postgres
+
+Luego, dentro de psql:
+
+   CREATE DATABASE naatzo;
+   \\q
+
+Si tu usuario de PostgreSQL no se llama postgres, usa el que tengas configurado.
+
+
+PASO 4 - CREA TU ARCHIVO .env
+------------------------------
+Copia el archivo .env.example y renombralo a .env.
+
+En Windows PowerShell:
+
+   Copy-Item .env.example .env
+
+En Git Bash, macOS o Linux:
+
+   cp .env.example .env
+
+Abre .env con Bloc de notas, VS Code o cualquier editor.
+
+Para probar SIN Gemini, GitHub ni Discord, deja/configura al menos esto:
+
+   PORT=4000
+   NODE_ENV=development
+   CORS_ORIGINS=http://localhost:5173
+   JWT_SECRET=un-secreto-de-prueba-largo-123
+   JWT_EXPIRES_IN=7d
+
+   DATABASE_URL=postgres://postgres:TU_PASSWORD@localhost:5432/naatzo
+   DATABASE_SSL=false
+   DB_SCHEMA=public
+
+   DEMO_MODE=true
+   LLM_PROVIDER=mock
+   LLM_API_KEY=
+
+   GITHUB_TOKEN=
+   DISCORD_WEBHOOK_URL=
+
+IMPORTANTE:
+- Cambia TU_PASSWORD por la contraseña de TU PostgreSQL.
+- Si tu usuario no es postgres, cambia tambien el usuario en DATABASE_URL.
+- En PostgreSQL local usa DATABASE_SSL=false.
+- No copies el .env de otra persona si contiene llaves o contraseñas.
+
+Ejemplo, si tu usuario es postgres y tu contraseña es 1234:
+
+   DATABASE_URL=postgres://postgres:1234@localhost:5432/naatzo
+
+
+PASO 5 - CREA LAS TABLAS
+-------------------------
+Con PostgreSQL corriendo y el .env configurado, ejecuta:
+
+   npm run migrate
+
+Debe terminar sin errores.
+
+
+PASO 6 - ARRANCA EL BACKEND
+----------------------------
+Ejecuta:
+
+   npm start
+
+Deja esa terminal abierta.
+
+La API queda en:
+
+   http://localhost:4000
+
+Para comprobar que el servidor funciona, abre:
+
+   http://localhost:4000/api/health
+
+Para comprobar la base de datos:
+
+   http://localhost:4000/api/health/db
+
+Para revisar las integraciones configuradas:
+
+   http://localhost:4000/api/health/integrations
+
+
+PASO 7 - PRUEBA EL FLUJO COMPLETO
+----------------------------------
+Con el servidor todavia corriendo, abre OTRA terminal dentro de la carpeta.
+
+En Windows, abre Git Bash.
+
+Ejecuta:
+
+   bash scripts/demo.sh
+
+El script prueba el flujo de Naatzo de punta a punta: crea datos de demo, ejecuta
+Analista y Planificador, espera/aprueba el plan, ejecuta DevOps y Notificador,
+muestra el tablero, genera el entorno y prueba las alertas de riesgo.
+
+
+GEMINI, GITHUB Y DISCORD
+-------------------------
+NO son obligatorios para probar.
+
+Gemini:
+- Con LLM_PROVIDER=mock se usan respuestas fijas de demostracion.
+- Tambien entra en mock si LLM_API_KEY esta vacia.
+
+GitHub:
+- Si GITHUB_TOKEN esta vacio, no crea un repositorio real.
+- El entorno generado se puede obtener como ZIP desde la API.
+
+Discord:
+- Si DISCORD_WEBHOOK_URL esta vacio, no manda un mensaje real.
+- El aviso queda guardado en el historial para poder mostrarlo.
+
+Si despues quieres probar los servicios reales, agrega tus propias credenciales en
+TU archivo .env. No subas ni compartas ese archivo.
+
+
+SI ALGO FALLA
+-------------
+1. "ECONNREFUSED" o error de conexion a la base:
+   - Confirma que PostgreSQL este encendido.
+   - Revisa usuario, contraseña, puerto y nombre de base en DATABASE_URL.
+
+2. "password authentication failed":
+   - La contraseña de PostgreSQL en DATABASE_URL es incorrecta.
+
+3. "database naatzo does not exist":
+   - Crea la base naatzo antes de ejecutar npm run migrate.
+
+4. Error al arrancar por variables de entorno:
+   - Revisa .env. El backend valida las variables al iniciar.
+
+5. scripts/demo.sh no corre en Windows:
+   - Abre Git Bash dentro de la carpeta y ejecutalo desde ahi.
+
+6. El puerto 4000 ya esta ocupado:
+   - Cierra el proceso que lo esta usando o cambia PORT en .env.
+
+
+RESUMEN RAPIDO
+--------------
+   npm install
+   copiar .env.example a .env
+   crear la base naatzo en PostgreSQL
+   editar DATABASE_URL y poner DATABASE_SSL=false
+   poner DEMO_MODE=true y LLM_PROVIDER=mock
+   npm run migrate
+   npm start
+
+En otra terminal:
+
+   bash scripts/demo.sh
