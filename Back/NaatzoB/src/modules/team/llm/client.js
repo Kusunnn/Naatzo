@@ -38,6 +38,7 @@ const shouldRetryExceptQuota = (err) => !isQuotaError(err) && isRetryableAxiosEr
 function describeHttpError(err, model) {
   const status = err?.response?.status;
   const detail = err?.response?.data?.error?.message;
+  if (status === 503) return `Gemini (${model}) está temporalmente saturado (503). Se agotaron los reintentos automáticos; espera un momento y usa Reintentar paso fallido.${detail ? ` Detalle: ${detail}` : ""}`;
   if (status) return `Gemini (${model}) respondio ${status}${detail ? `: ${detail}` : ""}`;
   return `No se pudo contactar a Gemini (${model}): ${err.code || err.message}`;
 }
@@ -61,7 +62,7 @@ async function callGemini({ model, system, user, responseSchema, temperature, ma
           headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
           timeout: 60_000,
         }),
-      { label: `llm.${model}`, retries: 2, shouldRetry: shouldRetryExceptQuota },
+      { label: `llm.${model}`, retries: 3, initialDelayMs: 2000, maxDelayMs: 10000, shouldRetry: shouldRetryExceptQuota },
     );
 
     const candidate = response.data?.candidates?.[0];

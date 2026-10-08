@@ -61,6 +61,7 @@ export function AgentPanel({ project }: { project: Project }) {
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [streamRevision, setStreamRevision] = useState(0);
   const [llmMode, setLlmMode] = useState<string>();
   useEffect(() => {
     let active=true;
@@ -153,7 +154,7 @@ export function AgentPanel({ project }: { project: Project }) {
             event.type,
           )
         ) {
-          setRun({ status: event.type as Run["status"] });
+          setRun({ status: event.type as Run["status"], error: event.error });
         }
       },
       controller.signal,
@@ -161,7 +162,7 @@ export function AgentPanel({ project }: { project: Project }) {
       if (!controller.signal.aborted) setError(err.message);
     });
     return () => controller.abort();
-  }, [project.runId]);
+  }, [project.runId, streamRevision]);
   useEffect(() => {
     if (
       !project.remoteId ||
@@ -327,10 +328,10 @@ export function AgentPanel({ project }: { project: Project }) {
                 action(async () => {
                   await agentApi.retry(
                     project.runId!,
-                    steps.find((s) => s.status === "failed")?.agent ||
+                    [...steps].reverse().find((s) => s.status === "failed")?.agent ||
                       "analyst",
                   );
-                  await refresh();
+                  setStreamRevision((revision) => revision + 1);
                 })
               }
             >
