@@ -237,6 +237,7 @@ export function ProjectDetail() {
                         style={{
                           background: [
                             "#94a3b8",
+                            "#7c6cdb",
                             "var(--primary)",
                             "#e7aa43",
                             "#40a888",

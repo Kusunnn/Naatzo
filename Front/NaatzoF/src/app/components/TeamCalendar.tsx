@@ -42,6 +42,12 @@ const COLUMN_STATUS: Record<
     bg: "bg-slate-100",
     border: "border-slate-200",
   },
+  "first-tasks": {
+    label: "Primeras tareas",
+    color: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary/20",
+  },
   "in-progress": {
     label: "En Proceso",
     color: "text-primary",
