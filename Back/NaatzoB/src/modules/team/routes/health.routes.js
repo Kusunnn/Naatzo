@@ -41,7 +41,7 @@ router.get("/integrations", (req, res) => {
         ownerType: env.GITHUB_OWNER_TYPE,
       },
       email: {
-        configured: Boolean(env.SMTP_HOST),
+        configured: email.isConfigured(),
         host: env.SMTP_HOST ? `${env.SMTP_HOST}:${env.SMTP_PORT}` : null,
         from: env.SMTP_HOST ? email.sender() : null,
       },

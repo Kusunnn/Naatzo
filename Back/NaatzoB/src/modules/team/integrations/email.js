@@ -4,27 +4,20 @@
 
 const nodemailer = require("nodemailer");
 const env = require("../config/env");
+const {smtpConfig}=require('../../../config/smtp');
 
 function isConfigured() {
-  return Boolean(env.SMTP_HOST);
+  return smtpConfig().configured;
 }
 
 function sender() {
-  return env.SMTP_FROM || (env.SMTP_USER ? `Naatzo <${env.SMTP_USER}>` : "Naatzo <naatzo@localhost>");
+  return smtpConfig().from;
 }
 
 let _transport = null;
 function transport() {
   if (!_transport) {
-    _transport = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465, // 465 es TLS directo; 587 usa STARTTLS
-      auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-    });
+    _transport = nodemailer.createTransport(smtpConfig().options);
   }
   return _transport;
 }

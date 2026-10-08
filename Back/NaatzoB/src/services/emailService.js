@@ -1,12 +1,14 @@
 const nodemailer = require('nodemailer');
 const db = require('../db/postgres');
 const { ensureTables } = require('./collaborationService');
+const { smtpConfig } = require('../config/smtp');
 let transport;
-function configured() { return Boolean(process.env.SMTP_HOST && process.env.EMAIL_FROM && (!process.env.SMTP_USER || process.env.SMTP_PASSWORD)); }
+function configured() { return smtpConfig().configured; }
 async function sendEmail({ to, subject, text, html }) {
   if (!configured()) return { sent: false, reason: 'Correo no configurado. Puedes compartir el enlace.' };
-  if (!transport) transport = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT || 587), secure: process.env.SMTP_SECURE === 'true', auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined, connectionTimeout: 10000, socketTimeout: 15000 });
-  await transport.sendMail({ from: process.env.EMAIL_FROM, to, subject, text, html, textEncoding: 'base64' });
+  const config=smtpConfig();
+  if (!transport) transport = nodemailer.createTransport(config.options);
+  await transport.sendMail({ from: config.from, to, subject, text, html, textEncoding: 'base64' });
   return { sent: true };
 }
 async function sendOnce(key, message) {
