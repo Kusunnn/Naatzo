@@ -5,6 +5,9 @@ import { es } from 'date-fns/locale';
 import { BookOpen, ExternalLink, Calendar, Lightbulb } from 'lucide-react';
 import { ElephantMascot } from './ElephantMascot';
 import { apiRequest } from '../services/api';
+import { useProjects } from '../contexts/ProjectContext';
+import { useAuth } from '../contexts/AuthContext';
+import { recommendationTasks, recommendationQuery } from '../services/recommendationTasks';
 
 interface RecommendedBook {
   id: string;
@@ -23,40 +26,43 @@ interface TaskRecommendation {
 
 export function Recommendations() {
   const { tasks } = useTasks();
-  const incompleteTasks = useMemo(() => tasks.filter(task => !task.completed), [tasks]);
+  const { projects } = useProjects();
+  const { user } = useAuth();
+  const incompleteTasks = useMemo(() => recommendationTasks(tasks, projects, user), [tasks, projects, user]);
   const [recommendationByTask, setRecommendationByTask] = useState<Record<string, TaskRecommendation>>({});
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
 
     const loadRecommendations = async () => {
       setIsLoading(true);
-      const entries = await Promise.all(
-        incompleteTasks.map(async (task) => {
+      setRecommendationByTask({});
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(3, incompleteTasks.length) }, async () => {
+        while (isMounted && next < incompleteTasks.length) {
+          const task = incompleteTasks[next++];
+          let result: TaskRecommendation;
           try {
-            const payload = await apiRequest<TaskRecommendation>(
-              `/recommendations?taskId=${encodeURIComponent(task.id)}&limit=2`
+            result = await apiRequest<TaskRecommendation>(
+              recommendationQuery(task), { signal: controller.signal }
             );
-            return [task.id, payload] as const;
           } catch {
-            return [
-              task.id,
-              {
+            result = {
                 bestDay: 'Hoy',
                 recommendations: [],
                 error: 'No se pudo consultar Gutenberg. Vuelve a entrar para intentarlo nuevamente.',
-              },
-            ] as const;
+            };
           }
-        })
-      );
+          if (isMounted) setRecommendationByTask(previous => ({ ...previous, [task.id]: result }));
+        }
+      }));
 
       if (!isMounted) {
         return;
       }
 
-      setRecommendationByTask(Object.fromEntries(entries));
       setIsLoading(false);
     };
 
@@ -64,6 +70,7 @@ export function Recommendations() {
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, [incompleteTasks]);
 
@@ -91,7 +98,7 @@ export function Recommendations() {
             <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-foreground mb-2">No hay tareas pendientes</h2>
             <p className="text-muted-foreground">
-              Agrega tareas en el calendario para recibir recomendaciones personalizadas
+              Agrega tareas en el calendario o asígnate actividades en un proyecto de equipo para recibir recomendaciones.
             </p>
           </div>
         ) : (
@@ -99,7 +106,8 @@ export function Recommendations() {
             {incompleteTasks.map((task) => {
               const taskRecommendation = recommendationByTask[task.id];
               const recommendedBooks = taskRecommendation?.recommendations || [];
-              const recommendedDay = taskRecommendation?.bestDay || format(getRecommendedDay(task.dueDate), "EEEE d 'de' MMMM", { locale: es });
+              const hasDate = task.dueDate && Number.isFinite(task.dueDate.getTime());
+              const recommendedDay = taskRecommendation?.bestDay || (hasDate ? format(getRecommendedDay(task.dueDate!), "EEEE d 'de' MMMM", { locale: es }) : 'Hoy');
 
               return (
                 <div
@@ -111,11 +119,12 @@ export function Recommendations() {
                       <ElephantMascot size="large" animate={false} />
                     </div>
                     <h2 className="text-white mb-2">{task.title}</h2>
+                    <p className="text-white/90 text-sm mb-2">{task.projectTitle ? `Equipo · ${task.projectTitle}` : 'Tarea individual'}</p>
                     <p className="text-white/90">{task.description}</p>
                     <div className="flex items-center gap-2 mt-3 text-white/90">
                       <Calendar className="w-4 h-4" />
                       <span>
-                        Vence: {format(task.dueDate, "d 'de' MMMM 'a las' HH:mm", { locale: es })}
+                        {hasDate ? `Vence: ${format(task.dueDate!, "d 'de' MMMM 'a las' HH:mm", { locale: es })}` : 'Sin fecha de entrega'}
                       </span>
                     </div>
                   </div>
@@ -138,7 +147,7 @@ export function Recommendations() {
 
                     {recommendedBooks.length === 0 && (
                       <p className="text-muted-foreground" role="status">
-                        {isLoading ? 'Buscando libros relacionados en Gutenberg…' : taskRecommendation?.error || 'No encontramos libros relacionados en Gutenberg para esta tarea. Su catálogo no cubre todos los temas.'}
+                        {isLoading && !taskRecommendation ? 'Buscando libros relacionados en Gutenberg…' : taskRecommendation?.error || 'No encontramos libros relacionados en Gutenberg para esta tarea. Su catálogo no cubre todos los temas.'}
                       </p>
                     )}
                     {recommendedBooks.length > 0 && (

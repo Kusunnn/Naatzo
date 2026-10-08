@@ -3,7 +3,9 @@ const { readDb, writeDb } = require("../repositories/dbRepository");
 const { HttpError } = require("../utils/httpError");
 const { createId } = require("../utils/id");
 const { extractText } = require('../modules/team/utils/documents');
-const { buildChatbotContext } = require('../services/chatbotContextService');
+const { buildChatbotContext, teamTasksForUser } = require('../services/chatbotContextService');
+const postgres = require('../db/postgres');
+const { taskOrdinal } = require('../../../../shared/chatTaskReference');
 
 async function getOrCreateSession(userId) {
   const db = await readDb();
@@ -100,7 +102,11 @@ async function ask(req, res, next) {
     }
 
     const { session } = await getOrCreateSession(userId);
-    const userContext = await buildChatbotContext(await readDb(), userId, message);
+    const { rows: projects } = await postgres.query(`SELECT id, snapshot FROM naatzo_shared_projects
+      WHERE owner_id = $1 OR EXISTS (SELECT 1 FROM jsonb_array_elements(snapshot->'members') m WHERE m->>'userId' = $1)`, [req.user.id]);
+    const history = taskOrdinal(String(message)) !== null
+      ? (await callChatbot(`/chat/sessions/${encodeURIComponent(session.sessionId)}/messages?limit=1000`)).messages || [] : [];
+    const userContext = await buildChatbotContext(await readDb(), userId, message, teamTasksForUser(projects, req.user), history);
 
     const result = await callChatbot("/chat", {
       method: "POST",

@@ -54,6 +54,7 @@ export function Chatbot() {
     try {
       const payload = await apiRequest<{ conversation: Array<{ id: string; role: 'user' | 'assistant'; message: string; createdAt: string }> }>('/chatbot/chat', {
         method: 'POST',
+        signal: AbortSignal.timeout(120000),
         body: {
           userId: user.id,
           message: userMessage.text,
@@ -77,7 +78,9 @@ export function Chatbot() {
         ...prev,
         {
           id: (Date.now() + 1).toString(),
-          text: error instanceof Error ? error.message : 'No pude conectar con el servicio de chatbot. Intenta nuevamente.',
+          text: error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+            ? 'El tutor tardó demasiado en responder. Puedes intentar de nuevo; el envío ya no está bloqueado.'
+            : error instanceof Error ? error.message : 'No pude conectar con el servicio de chatbot. Intenta nuevamente.',
           sender: 'bot',
           timestamp: new Date(),
         },

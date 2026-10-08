@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../contexts/TaskContext';
+import { useProjects } from '../contexts/ProjectContext';
+import { useAuth } from '../contexts/AuthContext';
+import { recommendationTasks, upcomingTasks } from '../services/recommendationTasks';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Bell, Clock, AlertCircle, BookOpen, ExternalLink } from 'lucide-react';
@@ -30,6 +33,8 @@ interface NotificationPanelProps {
 
 export function NotificationPanel({ isMobile = false }: NotificationPanelProps) {
   const { tasks } = useTasks();
+  const { projects } = useProjects();
+  const { user } = useAuth();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -39,9 +44,7 @@ export function NotificationPanel({ isMobile = false }: NotificationPanelProps) 
 
   const notifications = useMemo(
     () =>
-      tasks
-      .filter(task => !task.completed && Number.isFinite(task.dueDate.getTime()) && task.dueDate.getTime() <= now + 3 * 24 * 60 * 60 * 1000)
-      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+      upcomingTasks(recommendationTasks(tasks, projects, user), now)
       .map((task) => {
         const remaining = task.dueDate.getTime() - now;
         const urgency: 'high' | 'medium' = remaining <= 24 * 60 * 60 * 1000 ? 'high' : 'medium';
@@ -56,7 +59,7 @@ export function NotificationPanel({ isMobile = false }: NotificationPanelProps) 
           recommendedBook: null as BackendNotification['recommendation'],
         };
       }),
-    [tasks, now]
+    [tasks, projects, user, now]
   );
 
   return (
@@ -135,6 +138,9 @@ export function NotificationPanel({ isMobile = false }: NotificationPanelProps) 
                         )}
                         <h4 className="text-foreground font-medium">{notification.task.title}</h4>
                       </div>
+                      <p className="text-muted-foreground text-xs mb-1">
+                        {notification.task.projectTitle ? `Equipo · ${notification.task.projectTitle}` : 'Tarea individual'}
+                      </p>
                       <p className="text-primary text-sm font-medium">
                         {format(notification.task.dueDate, "HH:mm '·' d MMM", { locale: es })}
                       </p>
