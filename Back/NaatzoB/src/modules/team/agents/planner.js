@@ -1,18 +1,19 @@
 // src/agents/planner.js
 //
 // Planificador (seccion 5.2).
+//   - Genera una propuesta directamente y pide una corrección solo si no valida.
 //   - El LLM desglosa en modulos y tareas: titulo, habilidad, estimacion,
 //     prioridad y dependencias. No asigna personas ni fechas.
 //   - El codigo (src/planning/) asigna por carga en orden topologico, calcula
 //     fechas, detecta sobrecarga y propone reasignaciones.
-//   - Si hay riesgo, el LLM solo redacta la explicacion de lo que calculo el codigo.
+//   - Los riesgos se explican con los datos calculados, sin inferencias extra.
 
 const env = require("../config/env");
 const db = require("../db");
 const board = require("../db/board");
 const clock = require("../utils/clock");
 const { generateStructured } = require("../llm/client");
-const { PlanSchema, planGemini, MAX_TASKS, ExplanationSchema, ExplanationGemini } = require("../llm/schemas");
+const { PlanSchema, planGemini, MAX_TASKS } = require("../llm/schemas");
 const { assignTasks } = require("../planning/assign");
 const { scheduleTasks } = require("../planning/schedule");
 const { weeksUntil, workloadRows } = require("../planning/workload");
@@ -20,6 +21,7 @@ const { withAvailability } = require("../planning/availability");
 const { proposeReassignments, planRisks } = require("../planning/risks");
 const { nextWorkday, maxDate } = require("../planning/dates");
 const { describeStack } = require("../templates/catalog");
+const { loadMembers } = require('../orchestrator/inputs');
 
 const SYSTEM = `Eres el Planificador de Naatzo, un gestor de proyectos académicos, de investigación y de software.
 Recibes el analisis de un proyecto y desglosas el trabajo en modulos y tareas.
@@ -40,9 +42,6 @@ Reglas:
 - Prioridad high para lo indispensable de la entrega, low para lo marcado como opcional o no urgente.
 - Escribe en espanol.`;
 
-const EXPLAIN_SYSTEM = `Eres el Planificador de Naatzo. Redacta en 2 a 4 oraciones, en espanol y en tono claro,
-la situacion del plan a partir de los datos que te dan. No cambies numeros, nombres ni fechas,
-no inventes datos y no propongas cambios distintos a los de la lista de propuestas.`;
 
 function buildPrompt(input, skills) {
   const a = input.analysis;
@@ -159,23 +158,56 @@ async function run(input, ctx) {
   }
   const startDate = nextWorkday(maxDate(input.startDate || clock.today(), clock.today()));
   const deadline = input.deadline;
+  if (input.teamId) input = { ...input, members: await loadMembers(input.teamId, input.projectId) };
+  if (!input.members.length) throw new Error('El equipo no tiene miembros activos.');
   const skills = [...new Set(input.members.flatMap((m) => m.skills))].sort();
 
   // 1) El LLM desglosa
-  ctx.progress("Desglosando el proyecto en modulos y tareas");
-  const plan = await generateStructured({
+  ctx.progress("Planificando la idea a partir del análisis del documento");
+  const generatePlan = async (feedback = '') => {
+    const started = Date.now();
+    const heartbeat = setInterval(() => ctx.progress(`El modelo sigue elaborando el plan (${Math.round((Date.now() - started) / 1000)} s)`), 15000);
+    try {
+      return await generateStructured({
     model: env.LLM_MODEL_SMART,
     fallbackModel: env.LLM_MODEL_FAST,
-    system: SYSTEM,
-    user: buildPrompt(input, skills),
+    system: `${SYSTEM}\nRedacta descripciones de una línea y dos criterios breves por tarea. Prefiere 8 a 12 tareas agrupadas cuando permita cubrir todos los requisitos; amplía solo si es necesario. No repitas información ni inventes módulos para rellenar.`,
+    user: `${buildPrompt(input, skills)}\n${feedback}`,
     responseSchema: planGemini(skills),
     zodSchema: PlanSchema,
     temperature: 0.3,
     maxOutputTokens: 8192,
+    maxAttempts: 1,
     mockKey: "planner",
-    allowMock: !input.documentFilename,
+    allowMock: env.LLM_MOCK && !input.documentFilename,
     ctx,
-  });
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
+  };
+
+  // Flujo directo: una propuesta y, solo si falla la validación, una corrección.
+  let plan, evaluation, drafts = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (await ctx.isCancelled?.()) throw new Error('Planificación cancelada antes de generar.');
+    ctx.progress(attempt ? 'Corrigiendo los problemas detectados en la propuesta' : 'Proponiendo una solución para el proyecto');
+    try {
+      drafts++;
+      plan = await generatePlan(attempt
+        ? `Corrige estos errores sin omitir requisitos del documento: ${JSON.stringify(evaluation.errors)}`
+        : '');
+      ctx.progress('Validando dependencias, responsables y fechas');
+      evaluation = evaluateDraft(plan, input, startDate);
+      if (evaluation.valid) break;
+    } catch (error) {
+      if (ctx.signal?.aborted || await ctx.isCancelled?.()) throw error;
+      evaluation = { valid: false, errors: [error.message], risks: [] };
+    }
+  }
+  if (!evaluation?.valid) {
+    throw new Error(`No se pudo validar el plan: ${evaluation?.errors?.join('; ')}. El tablero anterior no se reemplazó; reintenta el paso.`);
+  }
 
   const tasks = plan.modules.flatMap((mod, moduleIndex) =>
     mod.tasks.map((t) => ({ ...t, skill: t.skill.toLowerCase(), module: mod.name, moduleIndex, flags: [] })),
@@ -202,30 +234,14 @@ async function run(input, ctx) {
     .filter((w) => w.percent > 100)
     .map((w) => ({ memberId: w.memberId, name: w.name, percent: w.percent }));
 
+  if (await ctx.isCancelled?.()) throw new Error('Planificación cancelada antes de guardar.');
   await saveTasks(input.projectId, plan.modules, ordered);
 
-  // 3) Si hay riesgo, el LLM redacta la explicacion (si falla, va el texto fijo)
+  // Explicación de riesgos desde hechos calculados.
   const facts = { finishDate, deadline, overloaded, proposals, risks };
   let explanation = null;
-  if (atRisk || proposals.length > 0) {
-    ctx.progress("Redactando la explicacion de los riesgos");
-    try {
-      ({ explanation } = await generateStructured({
-        model: env.LLM_MODEL_FAST,
-        system: EXPLAIN_SYSTEM,
-        user: `Datos del plan (JSON):\n${JSON.stringify(facts, null, 2)}`,
-        responseSchema: ExplanationGemini,
-        zodSchema: ExplanationSchema,
-        temperature: 0.3,
-        mockKey: "planExplanation",
-        mockInput: facts,
-        ctx,
-      }));
-    } catch (err) {
-      console.warn(`[planner] No se pudo redactar la explicacion: ${err.message}`);
-      explanation = fallbackExplanation(facts);
-    }
-  }
+  if (atRisk || proposals.length > 0) explanation = fallbackExplanation(facts);
+
 
   const memberName = new Map(members.map((m) => [m.id, m.name]));
   let summary = `${ordered.length} tareas en ${plan.modules.length} modulos.`;
@@ -236,6 +252,8 @@ async function run(input, ctx) {
 
   return {
     summary,
+    autonomy: { enabled: false, reason: 'Generación directa con validación por código; sin ciclo de decisiones autónomas.' },
+    validation: { valid: true, drafts },
     moduleCount: plan.modules.length,
     taskCount: ordered.length,
     startDate,
@@ -264,6 +282,29 @@ async function run(input, ctx) {
       flags: [...new Set(t.flags)],
     })),
   };
+}
+
+function evaluateDraft(draft, input, startDate) {
+  try {
+    const parsed = PlanSchema.parse(draft);
+    assertPlanGrounding(parsed, input.analysis);
+    const weeks = weeksUntil(startDate, input.deadline);
+    const members = withAvailability(input.members, startDate, weeks);
+    const tasks = parsed.modules.flatMap((mod, moduleIndex) => mod.tasks.map(t => ({
+      ...t, skill: t.skill.toLowerCase(), moduleIndex, flags: [],
+    })));
+    const { ordered } = assignTasks(tasks, members);
+    const errors = ordered.filter(t => t.flags.some(f => ['dependencia_invalida', 'dependencia_ciclica'].includes(f)))
+      .map(t => `Dependencias inválidas o cíclicas en ${t.key}`);
+    const finishDate = scheduleTasks(ordered, members.map(m => ({ id: m.id, weeklyHours: m.weeklyHours, busyHours: m.busyHours, blocked: m.blocked })), startDate);
+    const workload = workloadRows(members, weeks);
+    const risk = planRisks({ finishDate, deadline: input.deadline, workload, tasks: ordered });
+    return { valid: errors.length === 0, errors, finishDate, workload, risks: risk.risks,
+      proposals: proposeReassignments(ordered, members),
+      assignments: ordered.map(t => ({ key: t.key, assigneeId: t.assigneeId, flags: t.flags })) };
+  } catch (error) {
+    return { valid: false, errors: [error.message], risks: [] };
+  }
 }
 
 function isFirstTask(task) {
@@ -296,4 +337,4 @@ function assertPlanGrounding(plan, analysis) {
   if (unrelated) throw new Error(`El plan propuso una tarea técnica sin respaldo en el documento: "${unrelated.title}". No se guardó el plan; revisa el análisis y reintenta el Planificador.`);
 }
 
-module.exports = { run, isFirstTask, selectFirstTasks, assertPlanGrounding };
+module.exports = { run, isFirstTask, selectFirstTasks, assertPlanGrounding, evaluateDraft };

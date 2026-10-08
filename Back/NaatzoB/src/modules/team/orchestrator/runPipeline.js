@@ -30,6 +30,7 @@ function buildContext(runId, projectId, agent) {
     runId,
     projectId,
     llm,
+    isCancelled: () => store.isCancelled(runId),
     recordLlm({ model, usage }) {
       llm.models.push(model);
       llm.inputTokens += usage?.inputTokens || 0;
@@ -82,13 +83,14 @@ async function runPipeline(runId, { from = "analyst" } = {}) {
         durationMs,
       });
     } catch (err) {
+      if (await store.isCancelled(runId)) return;
       const durationMs = Date.now() - started;
       console.error(`[pipeline] ${runId} fallo en ${step}: ${err.message}`);
       // Si fallo al armar la entrada todavia no hay fila; se crea para la traza.
       if (!stepId) stepId = await store.startStep(runId, step, null);
       await store.finishStep(stepId, {
         status: "failed",
-        output: { error: err.message },
+        output: { error: err.message, ...(err.plannerTrace ? { autonomy: err.plannerTrace } : {}) },
         llm: ctx.llm,
         durationMs,
       });

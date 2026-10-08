@@ -49,7 +49,7 @@ function describeHttpError(err, model) {
 }
 
 /** Una llamada a generateContent. Regresa el texto y el uso de tokens. */
-async function callGemini({ model, system, user, responseSchema, temperature, maxOutputTokens }) {
+async function callGemini({ model, system, user, responseSchema, temperature, maxOutputTokens, signal }) {
   return withKeyRotation(pool(), async (apiKey) => {
     const body = {
       systemInstruction: { parts: [{ text: system }] },
@@ -66,6 +66,7 @@ async function callGemini({ model, system, user, responseSchema, temperature, ma
         axios.post(`${BASE_URL}/${model}:generateContent`, body, {
           headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
           timeout: 60_000,
+          signal,
         }),
       { label: `llm.${model}`, retries: 3, initialDelayMs: 2000, maxDelayMs: 10000, shouldRetry: shouldRetryExceptQuota },
     );
@@ -130,6 +131,7 @@ async function generateStructured({
   temperature = 0.2,
   maxOutputTokens = 4096,
   allowMock = true,
+  maxAttempts = 2,
 }) {
   if (env.LLM_MOCK) {
     if (!allowMock) throw new Error('Este análisis requiere IA real; no se permite sustituir el documento por datos demo.');
@@ -143,7 +145,7 @@ async function generateStructured({
   let lastError;
 
   // Primer intento y un reintento mandando el error de validacion.
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let res;
     try {
       res = await (env.LLM_PROVIDER === "ollama" ? callOllama : callGemini)({
@@ -154,8 +156,10 @@ async function generateStructured({
         zodSchema,
         temperature,
         maxOutputTokens,
+        signal: ctx?.signal,
       });
     } catch (err) {
+      if (ctx?.signal?.aborted) throw new Error('La petición de IA fue cancelada; reintenta el paso.');
       if (env.LLM_PROVIDER === "gemini" && isQuotaError(err) && fallbackModel && currentModel !== fallbackModel) {
         console.warn(`[llm] Cuota agotada en ${currentModel}; se usa ${fallbackModel}`);
         currentModel = fallbackModel;
@@ -197,7 +201,7 @@ function useMock({ mockKey, mockInput, zodSchema, ctx, label }) {
   return result.data;
 }
 
-async function callOllama({ model, system, user, zodSchema, temperature, maxOutputTokens }) {
+async function callOllama({ model, system, user, zodSchema, temperature, maxOutputTokens, signal }) {
   const format = z.toJSONSchema(zodSchema, { io: "input" });
   const { data } = await axios.post(`${env.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/chat`, {
     model,
@@ -210,7 +214,7 @@ async function callOllama({ model, system, user, zodSchema, temperature, maxOutp
     ],
     options: { temperature, num_predict: maxOutputTokens, num_ctx: 16384 },
     keep_alive: "15m",
-  }, { timeout: env.OLLAMA_TIMEOUT_MS });
+  }, { timeout: env.OLLAMA_TIMEOUT_MS, signal });
   if (data.error) throw new Error(data.error);
   return {
     text: data.message?.content || "",

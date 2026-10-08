@@ -96,6 +96,7 @@ async function loadInputFor(runId, step) {
       const { analysis } = requireOutput(outputs, "analyst");
       return {
         ...base,
+        teamId: project.team_id,
         analysis,
         startDate: project.start_date,
         // La fecha que se puso al crear el proyecto manda sobre la de la minuta.
@@ -119,7 +120,8 @@ async function loadInputFor(runId, step) {
         objective: analysis.objective,
         boardUrl: boardUrl(project.id),
         repoUrl: devops.repoUrl || null,
-        zipUrl: devops.repoUrl ? null : zipUrl(project.id),
+        teams: devops.teams || null,
+        zipUrl: devops.zipUrl || (devops.repoUrl ? null : zipUrl(project.id)),
         plan: {
           taskCount: plan.taskCount,
           moduleCount: plan.moduleCount,

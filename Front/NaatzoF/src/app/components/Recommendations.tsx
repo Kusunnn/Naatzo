@@ -147,7 +147,7 @@ export function Recommendations() {
 
                     {recommendedBooks.length === 0 && (
                       <p className="text-muted-foreground" role="status">
-                        {isLoading && !taskRecommendation ? 'Buscando libros relacionados en Gutenberg…' : taskRecommendation?.error || 'No encontramos libros relacionados en Gutenberg para esta tarea. Su catálogo no cubre todos los temas.'}
+                        {isLoading && !taskRecommendation ? 'Buscando libros relacionados en Gutenberg…' : taskRecommendation?.error || 'No encontramos libros relacionados en Gutenberg para esta tarea.'}
                       </p>
                     )}
                     {recommendedBooks.length > 0 && (
