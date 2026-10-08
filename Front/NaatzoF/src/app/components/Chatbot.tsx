@@ -147,7 +147,6 @@ export function Chatbot() {
                 </div>
                 <div>
                   <h1 className="text-foreground text-lg md:text-xl">Asistente Naatzo</h1>
-                  <p className="text-muted-foreground text-sm hidden md:block">Siempre listo para ayudarte</p>
                 </div>
               </div>
               <button

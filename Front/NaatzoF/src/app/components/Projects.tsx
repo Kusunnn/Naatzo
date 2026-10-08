@@ -83,11 +83,7 @@ export function Projects() {
               <Users />
             </div>
             <div>
-              <p className="team-eyebrow">NAATZO · ESPACIO DE EQUIPO</p>
-              <h1>Proyectos que avanzan juntos</h1>
-              <p className="text-muted-foreground">
-                Del primer acuerdo a la última entrega, en un solo lugar.
-              </p>
+              <h1>Proyectos</h1>
             </div>
           </div>
           <button className="team-primary" onClick={() => setOpen(true)}>

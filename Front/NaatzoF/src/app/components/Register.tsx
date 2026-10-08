@@ -64,10 +64,7 @@ export function Register() {
             </div>
           </div>
 
-          <h1 className="text-center text-primary mb-2">Crear cuenta</h1>
-          <p className="text-center text-muted-foreground mb-8">
-            Únete a Naatzo y organiza tus tareas
-          </p>
+          <h1 className="text-center text-primary mb-8">Crear cuenta</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

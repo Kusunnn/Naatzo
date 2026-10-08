@@ -79,9 +79,6 @@ export function Library() {
             </div>
             Biblioteca Digital
           </h1>
-          <p className="text-muted-foreground">
-            Explora libros de dominio público disponibles en Project Gutenberg
-          </p>
         </div>
 
         <div className="mb-8 space-y-4">

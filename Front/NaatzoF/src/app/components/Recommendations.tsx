@@ -84,9 +84,6 @@ export function Recommendations() {
             </div>
             Recomendaciones Personalizadas
           </h1>
-          <p className="text-muted-foreground">
-            Libros sugeridos y días recomendados para cada tarea
-          </p>
         </div>
 
         {incompleteTasks.length === 0 ? (

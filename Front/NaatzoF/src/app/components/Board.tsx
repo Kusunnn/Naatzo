@@ -14,12 +14,7 @@ export function Board() {
               <Columns3 />
             </div>
             <div>
-              <p className="team-eyebrow">NAATZO · EQUIPO</p>
               <h1>Tablero de tareas</h1>
-              <p className="text-muted-foreground">
-                Asigna responsables, define prioridades y mueve las tareas entre
-                estados.
-              </p>
             </div>
           </div>
           <Link className="team-button" to="/team-calendar">

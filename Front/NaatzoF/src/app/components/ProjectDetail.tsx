@@ -126,12 +126,7 @@ export function ProjectDetail() {
         </Link>
         <header className="team-heading !mb-4">
           <div>
-            <p className="team-eyebrow">NAATZO · PROYECTO</p>
             <h1>{project.title}</h1>
-            <p className="text-muted-foreground mt-2 max-w-3xl whitespace-pre-wrap">
-              {project.description ||
-                "Proyecto creado desde un documento. Sus detalles se completarán al analizarlo."}
-            </p>
           </div>
           <div className="flex flex-wrap gap-3">
           <DeleteProjectButton project={project}/>
@@ -561,6 +556,7 @@ export function ProjectDetail() {
               </section>
               <section className="team-panel">
                 <h2>Descripción del proyecto</h2>
+                {project.description&&<p className="text-sm text-muted-foreground whitespace-pre-wrap mb-4">{project.description}</p>}
                 <button
                   className="team-button"
                   onClick={() => {

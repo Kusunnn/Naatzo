@@ -89,9 +89,6 @@ export function Calendar() {
                 <span className="block text-3xl font-bold">
                   Calendario de Tareas
                 </span>
-                <span className="block text-muted-foreground text-base mt-1">
-                  Tus tareas personales y las actividades asignadas a ti
-                </span>
               </div>
             </h1>
             <div className="flex items-center gap-4 bg-card px-6 py-3 rounded-2xl shadow-lg border border-border">

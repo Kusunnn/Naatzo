@@ -48,10 +48,7 @@ export function Login() {
             <ElephantMascot size="large" />
           </div>
 
-          <h1 className="text-center text-foreground mb-2">Bienvenido a Naatzo</h1>
-          <p className="text-center text-muted-foreground mb-8">
-            Tu gestor de tareas inteligente
-          </p>
+          <h1 className="text-center text-foreground mb-8">Bienvenido a Naatzo</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
