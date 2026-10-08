@@ -130,7 +130,7 @@ export function ProjectDetail() {
             <h1>{project.title}</h1>
             <p className="text-muted-foreground mt-2 max-w-3xl whitespace-pre-wrap">
               {project.description ||
-                "Proyecto creado desde un documento. Los detalles y los integrantes se completarán al analizarlo."}
+                "Proyecto creado desde un documento. Sus detalles se completarán al analizarlo."}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -403,8 +403,7 @@ export function ProjectDetail() {
               {project.members.length === 0 && (
                 <p className="text-sm text-muted-foreground mb-4">
                   Los integrantes aún no se han confirmado. Puedes agregarlos
-                  aquí o completar el equipo al analizar el documento o la
-                  descripción.
+                  aquí. Los integrantes se registran manualmente en este apartado.
                 </p>
               )}
               <form

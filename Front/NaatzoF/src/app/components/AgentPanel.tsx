@@ -9,7 +9,6 @@ import {
 import {
   Project,
   KanbanTask,
-  makeMember,
   useProjects,
 } from "../contexts/ProjectContext";
 import {
@@ -80,7 +79,7 @@ export function AgentPanel({ project }: { project: Project }) {
       if(!task.assignee)return task;
       let member=isSelfParticipant(task.assignee.name) ? members.find(m=>m.userId===project.ownerUserId) : undefined;
       member ??= members.find(m=>m.id===task.assignee!.id || m.name.trim().toLowerCase()===task.assignee!.name.trim().toLowerCase());
-      if(!member){member={...makeMember(task.assignee.name,members.length),id:task.assignee.id};members.push(member);}
+      if(!member)return {...task,assigneeId:'',assignee:undefined};
       return {...task,assigneeId:member.id};
     })}));
     const tasks=normalizeBoard({...board,columns},project.id);

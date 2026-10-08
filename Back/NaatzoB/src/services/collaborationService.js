@@ -85,7 +85,7 @@ function cleanSnapshot(input, user, current) {
   if(Array.isArray(synced))snapshot.syncedMemberIds=synced.filter(id=>typeof id==='string'&&id.length<=100).slice(0,100);
   // Preserve members who accepted an invitation, even if the owner's local snapshot is older.
   current?.snapshot.members.filter(member => member.userId && !snapshot.members.some(m => m.id === member.id)).forEach(member => snapshot.members.push(member));
-  if (!snapshot.members.some(member => member.userId === user.id) && !current) snapshot.members.push({ id: crypto.randomUUID(), name: user.name, userId: user.id, email: user.email, initials: user.name[0], color: 'var(--primary)', role: 'Propietario', skills: [], weeklyHours: 20 });
+  if (!snapshot.members.length && !current) snapshot.members.push({ id: crypto.randomUUID(), name: user.name, userId: user.id, email: user.email, initials: user.name[0], color: 'var(--primary)', role: 'Propietario', skills: [], weeklyHours: 20 });
   if (JSON.stringify({...snapshot,document:undefined}).length > 1_000_000) throw new HttpError(413, 'El proyecto es demasiado grande para compartir.');
   return snapshot;
 }

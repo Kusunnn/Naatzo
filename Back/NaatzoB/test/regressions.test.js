@@ -47,8 +47,9 @@ test('sharing preserves verified identities and cannot impersonate another membe
   const data = sample(); data.members[0].userId = 'stranger';
   const snapshot = cleanSnapshot(data, user);
   assert.equal(snapshot.members[0].userId, undefined);
-  assert.ok(snapshot.members.some(m => m.userId === user.id));
+  assert.equal(snapshot.members.length,data.members.length);
   const row = { id: 'canonical', owner_id: user.id, snapshot, version: 1 };
   assert.equal(canRead(row, 'stranger'), false);
+  assert.equal(canRead(row,user.id),true);
   assert.equal(view(row).tasks[0].projectId, 'canonical');
 });

@@ -34,6 +34,7 @@ export function Projects() {
     try {
       if (!file && !description.trim())
         throw new Error("Sube un documento o escribe una descripción para continuar.");
+      if(!parseParticipants(names).length)throw new Error('Agrega al menos un integrante. Puedes escribir “yo” si trabajas solo.');
       let document;
       if (file) {
         if (file.size > 2 * 1024 * 1024)
@@ -257,14 +258,15 @@ export function Projects() {
                     />
                   </label>
                 <label>
-                  Integrantes y roles (opcionales)
+                  Integrantes (obligatorio) y roles (opcionales)
                   <span className="text-xs text-muted-foreground">Separa nombres con “y”, comas o saltos de línea. Escribe “yo” para incluir tu cuenta. Los roles son opcionales.</span>
                   <textarea
                     aria-label="Integrantes y roles"
+                    required
                     rows={2}
                     value={names}
                     onChange={(e) => setNames(e.target.value)}
-                    placeholder={'yo: expositor\nLuis: investigación\nAna\nPuedes indicar solo nombres o dejarlo vacío.'}
+                    placeholder={'yo: expositor\nLuis: investigación\nAna\nAgrega al menos un nombre. Los roles son opcionales.'}
                   />
                 </label>
                 {error && (
@@ -275,6 +277,7 @@ export function Projects() {
                 <button
                   disabled={
                     saving ||
+                    !parseParticipants(names).length ||
                     (!file && !description.trim())
                   }
                   className="team-primary justify-center"
