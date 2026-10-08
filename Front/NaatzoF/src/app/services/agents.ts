@@ -94,11 +94,12 @@ export const agentApi = {
   }) =>
     request<{ project: { id: string } }>("/projects", {
       method: "POST",
-      body: data.file ? (() => {const form=new FormData();form.append('name',data.name);form.append('teamId',data.teamId);form.append('file',data.file);return form;})() : JSON.stringify(data),
+      body: data.file ? (() => {const form=new FormData();form.append('name',data.name);form.append('teamId',data.teamId);form.append('inputText',data.inputText);form.append('file',data.file);return form;})() : JSON.stringify(data),
     }),
-  upload: (id: string, file: File) => {
+  upload: (id: string, file: File, comments = '') => {
     const form = new FormData();
     form.append("file", file);
+    form.append('inputText',comments);
     return request(`/projects/${encodeURIComponent(id)}/document`, {
       method: "POST",
       body: form,

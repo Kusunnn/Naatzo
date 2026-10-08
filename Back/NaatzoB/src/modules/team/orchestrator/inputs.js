@@ -81,7 +81,7 @@ async function loadModules(projectId) {
 
 async function loadInputFor(runId, step) {
   const { rows } = await db.query(
-    "SELECT p.* FROM runs r JOIN projects p ON p.id = r.project_id WHERE r.id = $1",
+    "SELECT p.*, u.name AS author_name FROM runs r JOIN projects p ON p.id = r.project_id JOIN teams t ON t.id=p.team_id JOIN public.naatzo_users u ON u.id=t.owner_id WHERE r.id = $1",
     [runId],
   );
   const project = rows[0];
@@ -90,7 +90,7 @@ async function loadInputFor(runId, step) {
 
   switch (step) {
     case "analyst":
-      return { ...base, text: project.input_text };
+      return { ...base, text: project.input_text, authorName: project.author_name };
 
     case "planner": {
       const { analysis } = requireOutput(outputs, "analyst");

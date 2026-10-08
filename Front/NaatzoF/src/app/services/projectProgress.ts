@@ -13,6 +13,9 @@ export function acceptanceProgress(task: KanbanTask) {
       }
     : { total: 1, completed: task.column === "done" ? 1 : 0 };
 }
+export function isSelfParticipant(name: string) {
+  return /^(yo|yo mismo|yo misma|soy yo|este soy yo)$/i.test(name.trim());
+}
 export function taskProgress(task: KanbanTask) {
   const units = acceptanceProgress(task);
   return Math.round((units.completed / units.total) * 100);

@@ -32,6 +32,23 @@ router.post('/projects', asyncRoute(async (req,res) => {
   res.status(result.rows.length ? 201 : 200).json({ project: service.view(row) });
 }));
 router.get('/projects/:id', asyncRoute(async (req,res) => res.json({ project: service.view(await service.readProject(req.params.id,req.user)) })));
+router.post('/projects/:id/participants/:memberId/claim', asyncRoute(async (req,res)=>{
+  const client=await db.getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM naatzo_shared_projects WHERE id=$1 FOR UPDATE',[req.params.id]);
+    const row=await service.readProject(req.params.id,req.user,false,client);
+    const member=row.snapshot.members.find(m=>m.id===req.params.memberId);
+    if(!member)throw new HttpError(404,'Participante no encontrado.');
+    const reserved=await client.query('SELECT email FROM naatzo_invitations WHERE project_id=$1 AND member_id=$2 AND NOT revoked AND expires_at>NOW()',[row.id,member.id]);
+    if(reserved.rows.some(invite=>invite.email&&invite.email!==req.user.email.toLowerCase()))throw new HttpError(409,'Este participante tiene una invitación para otro correo.');
+    if((member.userId&&member.userId!==req.user.id)||(member.email&&member.email.toLowerCase()!==req.user.email.toLowerCase()))throw new HttpError(409,'Este participante corresponde a otra cuenta.');
+    row.snapshot.members.filter(m=>m.id!==member.id&&m.userId===req.user.id).forEach(m=>{delete m.userId;delete m.email;});
+    member.userId=req.user.id;member.email=req.user.email;
+    const result=await client.query('UPDATE naatzo_shared_projects SET snapshot=$2,version=version+1 WHERE id=$1 RETURNING *',[row.id,row.snapshot]);
+    await client.query('COMMIT');res.json({project:service.view(result.rows[0])});
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+}));
 router.patch('/projects/:id', asyncRoute(async (req,res) => {
   const current = await service.readProject(req.params.id,req.user); const version = Number(req.body.sharedVersion);
   if (!Number.isInteger(version)) throw new HttpError(400,'La versión del proyecto es obligatoria.');
@@ -49,11 +66,18 @@ router.get('/projects/:id/invitations', asyncRoute(async (req,res) => {
 router.post('/projects/:id/invitations', asyncRoute(async (req,res) => {
   const project = await service.readProject(req.params.id,req.user,true);
   const email = req.body.email ? String(req.body.email).trim().toLowerCase() : null;
+  const memberId=req.body.memberId || null;
+  if(memberId){
+    const member=project.snapshot.members.find(m=>m.id===memberId);
+    if(!member)throw new HttpError(404,'Participante no encontrado.');
+    if(member.userId)throw new HttpError(409,'Este participante ya tiene una cuenta vinculada.');
+    if(!email)throw new HttpError(400,'Indica el correo del participante.');
+  }
   if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length>254 || /[\r\n]/.test(email))) throw new HttpError(400,'Correo inválido.');
   const count = await db.query('SELECT COUNT(*)::int AS total FROM naatzo_invitations WHERE project_id=$1 AND expires_at>NOW() AND NOT revoked',[project.id]);
   if (count.rows[0].total>=50) throw new HttpError(429,'Revoca una invitación anterior antes de crear más.');
   const token = crypto.randomBytes(32).toString('base64url');const id=crypto.randomUUID();
-  const result = await db.query('INSERT INTO naatzo_invitations(id,project_id,token_hash,email,expires_at) VALUES($1,$2,$3,$4,NOW()+INTERVAL \'7 days\') RETURNING expires_at',[id,project.id,service.hash(token),email]);
+  const result = await db.query('INSERT INTO naatzo_invitations(id,project_id,token_hash,email,member_id,expires_at) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL \'7 days\') RETURNING expires_at',[id,project.id,service.hash(token),email,memberId]);
   const base = process.env.APP_URL || 'http://localhost:5173';
   const url = `${base.replace(/\/$/,'')}/invite/${token}`;
   let delivery = { sent:false, reason: email ? 'Correo no configurado. Comparte el enlace.' : 'Enlace creado.' };

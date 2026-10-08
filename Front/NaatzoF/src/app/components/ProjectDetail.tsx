@@ -22,9 +22,10 @@ import {
 import { AgentPanel } from "./AgentPanel";
 import { ProjectInvitations } from './ProjectInvitations';
 import { ProjectSaveStatus } from './ProjectSaveStatus';
+import { ParticipantActions } from './ParticipantActions';
 import { AcceptanceChecklist } from "./AcceptanceChecklist";
 import { useAuth } from "../contexts/AuthContext";
-import { linkMember, myMemberId } from "../services/projectProgress";
+import { myMemberId, isSelfParticipant } from "../services/projectProgress";
 import "./team.css";
 
 export function ProjectDetail() {
@@ -58,6 +59,7 @@ export function ProjectDetail() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [newMember, setNewMember] = useState("");
+  const [selectedMemberId,setSelectedMemberId]=useState<string>();
   if (!project)
     return (
       <div className="team-page">
@@ -140,14 +142,17 @@ export function ProjectDetail() {
         <div className="flex gap-4 items-center">
           <div className="flex -space-x-2">
             {project.members.map((m) => (
-              <span
+              <button
+                type="button"
+                aria-label={`Opciones de ${m.name}`}
+                onClick={()=>setSelectedMemberId(m.id)}
                 key={m.id}
                 title={m.name}
                 style={{ background: m.color }}
                 className="team-avatar"
               >
                 {m.initials}
-              </span>
+              </button>
             ))}
           </div>
           <span className="text-sm text-muted-foreground">
@@ -401,6 +406,12 @@ export function ProjectDetail() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const name = newMember.trim();
+                  if(isSelfParticipant(name)&&user){
+                    const existing=myMemberId(project,user);
+                    if(existing){setSelectedMemberId(existing);setNewMember('');return;}
+                    updateProject(project.id,{members:[...project.members,{...makeMember(user.name,project.members.length),userId:user.id,email:user.email}]});
+                    setNewMember('');return;
+                  }
                   if (
                     !name ||
                     project.members.some(
@@ -444,9 +455,7 @@ export function ProjectDetail() {
                           Boolean(m.userId && m.userId !== user.id)
                         }
                         onClick={() =>
-                          updateProject(project.id, {
-                            members: linkMember(project.members, m.id, user),
-                          })
+                          setSelectedMemberId(m.id)
                         }
                       >
                         {myMemberId(project, user) === m.id
@@ -457,12 +466,15 @@ export function ProjectDetail() {
                       </button>
                     )}
                     <div className="flex items-center gap-3 mb-4">
-                      <span
+                      <button
+                        type="button"
+                        aria-label={`Opciones de ${m.name}`}
+                        onClick={()=>setSelectedMemberId(m.id)}
                         className="team-avatar"
                         style={{ background: m.color }}
                       >
                         {m.initials}
-                      </span>
+                      </button>
                       <div>
                         <b>{m.name}</b>
                         <p className="text-xs text-muted-foreground">
@@ -570,6 +582,7 @@ export function ProjectDetail() {
         )}
         {tab === "members" && <ProjectInvitations project={project} />}
         {tab === "agents" && <AgentPanel project={project} />}
+        {selectedMemberId&&project.members.find(m=>m.id===selectedMemberId)&&<ParticipantActions key={selectedMemberId} project={project} member={project.members.find(m=>m.id===selectedMemberId)!} onClose={()=>setSelectedMemberId(undefined)}/>}
         {open && (
           <div className="team-modal-backdrop">
             <section

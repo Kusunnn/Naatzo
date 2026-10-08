@@ -20,6 +20,7 @@ import {
   normalizeBoard,
   streamRun,
 } from "../services/agents";
+import { isSelfParticipant } from '../services/projectProgress';
 
 const agents: { id: AgentId; title: string; description: string }[] = [
   {
@@ -76,7 +77,8 @@ export function AgentPanel({ project }: { project: Project }) {
     const members=[...project.members];
     const columns=board.columns.map(column=>({...column,tasks:column.tasks.map(task=>{
       if(!task.assignee)return task;
-      let member=members.find(m=>m.id===task.assignee!.id || m.name.trim().toLowerCase()===task.assignee!.name.trim().toLowerCase());
+      let member=isSelfParticipant(task.assignee.name) ? members.find(m=>m.userId===project.ownerUserId) : undefined;
+      member ??= members.find(m=>m.id===task.assignee!.id || m.name.trim().toLowerCase()===task.assignee!.name.trim().toLowerCase());
       if(!member){member={...makeMember(task.assignee.name,members.length),id:task.assignee.id};members.push(member);}
       return {...task,assigneeId:member.id};
     })}));
@@ -239,7 +241,7 @@ export function AgentPanel({ project }: { project: Project }) {
       remoteId = result.project.id;
       updateProject(project.id, { remoteId });
     }
-    if (existingRemote && file) await agentApi.upload(remoteId, file);
+    if (existingRemote && file) await agentApi.upload(remoteId, file, project.description);
     const result = await agentApi.start(remoteId);
     const runId = result.runId || result.id;
     if (!runId) throw new Error("El backend no devolvió un runId válido.");

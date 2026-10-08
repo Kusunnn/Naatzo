@@ -8,6 +8,7 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS naatzo_shared_projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, snapshot JSONB NOT NULL, version INT NOT NULL DEFAULT 1);
     CREATE TABLE IF NOT EXISTS naatzo_invitations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES naatzo_shared_projects(id), token_hash TEXT UNIQUE NOT NULL, email TEXT, expires_at TIMESTAMPTZ NOT NULL, revoked BOOLEAN NOT NULL DEFAULT FALSE, accepted_by TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]);
     CREATE TABLE IF NOT EXISTS naatzo_email_log (key TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE naatzo_invitations ADD COLUMN IF NOT EXISTS member_id TEXT;
   `).catch(error => { init = null; throw error; });
   await init;
 }
@@ -98,8 +99,10 @@ async function acceptInvitation(token, user) {
     if (invite.email && invite.accepted_by.length && !invite.accepted_by.includes(user.id)) throw new HttpError(410, 'La invitación ya fue utilizada.');
     if (invite.accepted_by.length >= 100 && !invite.accepted_by.includes(user.id)) throw new HttpError(410, 'El enlace alcanzó su límite de participantes.');
     const projects = await client.query('SELECT * FROM naatzo_shared_projects WHERE id=$1 FOR UPDATE', [invite.project_id]); const row = projects.rows[0];
-    if (!canRead(row, user.id)) {
-      const members = row.snapshot.members; const member = members.find(m => !m.userId && (m.email?.toLowerCase() === user.email.toLowerCase() || m.name.trim().toLowerCase() === user.name.trim().toLowerCase()));
+    if (invite.member_id || !canRead(row, user.id)) {
+      const members = row.snapshot.members; const member = invite.member_id ? members.find(m=>m.id===invite.member_id) : members.find(m => !m.userId && (m.email?.toLowerCase() === user.email.toLowerCase() || m.name.trim().toLowerCase() === user.name.trim().toLowerCase()));
+      if(invite.member_id && (!member || (member.userId && member.userId!==user.id)))throw new HttpError(409,'Este participante ya no está disponible.');
+      if(member)members.filter(m=>m.id!==member.id&&m.userId===user.id).forEach(m=>{delete m.userId;delete m.email;});
       if (member) { member.userId = user.id; member.email = user.email; } else members.push({ id: crypto.randomUUID(), userId: user.id, email: user.email, name: user.name, initials: user.name[0], color: 'var(--primary)', role: 'Integrante', skills: [], weeklyHours: 20 });
       row.version += 1;
       await client.query('UPDATE naatzo_shared_projects SET snapshot=$2,version=$3 WHERE id=$1', [row.id, row.snapshot, row.version]);

@@ -16,6 +16,7 @@ const serialize = require("../utils/serialize");
 const { ensureLists } = require("../db/board");
 const { receiveFile, extractText, MAX_CHARS } = require("../utils/documents");
 const { ACTIVE_STATUSES } = require("../orchestrator/store");
+const { combineProjectInput } = require('../utils/projectInput');
 
 const router = express.Router();
 
@@ -42,13 +43,13 @@ const boardUrl = (projectId) => `${env.FRONTEND_URL}/p/${projectId}/board`;
 
 // La minuta puede llegar pegada (inputText en JSON) o como archivo (campo
 // "file" en multipart/form-data, junto con teamId, name, deadline...).
-// Si llega archivo, su texto reemplaza a inputText.
+// Si llega archivo, inputText aporta comentarios que complementan su contenido.
 router.post(
   "/",
   receiveFile,
   asyncHandler(async (req, res) => {
     const document = req.file ? await extractText(req.file) : null;
-    const p = validate(ProjectSchema, document ? { ...req.body, inputText: document.text } : req.body);
+    const p = validate(ProjectSchema, {...req.body,inputText:combineProjectInput(document?.text,req.body.inputText)});
     const team = await getTeam(req.user.id, p.teamId);
     const project = await db.withTransaction(async (client) => {
       const { rows } = await client.query(
@@ -74,6 +75,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const project = await getProject(req.user.id, req.params.id);
     const document = await extractText(req.file);
+    const inputText=combineProjectInput(document.text,req.body.inputText);
 
     // Con una ejecucion en curso, cambiar la minuta dejaria el plan a medias.
     const { rowCount } = await db.query("SELECT 1 FROM runs WHERE project_id = $1 AND status = ANY($2)", [
@@ -85,7 +87,7 @@ router.post(
     const { rows } = await db.query(
       `UPDATE projects SET input_text = $2, input_filename = $3, updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [project.id, document.text, document.filename],
+      [project.id, inputText, document.filename],
     );
     res.json({
       ok: true,

@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, useRef, FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   Users,
@@ -11,8 +11,11 @@ import {
 import { makeMember, useProjects } from "../contexts/ProjectContext";
 import "./team.css";
 import { MetricCard } from "./MetricCard";
+import { useAuth } from '../contexts/AuthContext';
+import { isSelfParticipant } from '../services/projectProgress';
 
 export function Projects() {
+  const {user}=useAuth();
   const { projects, addProject, getProgress, storageError } = useProjects();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -22,20 +25,16 @@ export function Projects() {
   const [description, setDescription] = useState("");
   const [names, setNames] = useState("");
   const [file, setFile] = useState<File>();
-  const [inputMode, setInputMode] = useState<"description" | "document">(
-    "description",
-  );
+  const fileInput=useRef<HTMLInputElement>(null);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setSaving(true);
     try {
-      if (inputMode === "document" && !file)
-        throw new Error("Selecciona un documento para crear el proyecto.");
-      if (inputMode === "description" && !description.trim())
-        throw new Error("Describe el proyecto para continuar.");
+      if (!file && !description.trim())
+        throw new Error("Sube un documento o escribe una descripción para continuar.");
       let document;
-      if (file && inputMode === "document") {
+      if (file) {
         if (file.size > 2 * 1024 * 1024)
           throw new Error(
             "El documento debe pesar como máximo 2 MB.",
@@ -51,22 +50,20 @@ export function Projects() {
         });
         document = { name: file.name, data };
       }
-      const memberNames = [
-        ...new Set(
-          names
-            .split(/[,\n]/)
-            .map((n) => n.trim())
-            .filter(Boolean),
-        ),
-      ];
+      const members = names.split(/[,\n]/).filter(n=>n.trim()).map((entry,index)=>{
+        const [label,...roleParts]=entry.split(/\s*:\s*|\s+-\s+/);
+        const name=isSelfParticipant(label)&&user?user.name:label.trim();
+        const member={...makeMember(name,index),role:roleParts.join(' - ').trim()||'Integrante'};
+        return user&&name.toLowerCase()===user.name.trim().toLowerCase()?{...member,userId:user.id,email:user.email}:member;
+      }).filter((member,index,all)=>member.name&&all.findIndex(m=>m.name.toLowerCase()===member.name.toLowerCase())===index);
       const id = addProject({
         title:
           title.trim() ||
-          (inputMode === "document"
+          (file
             ? file!.name.replace(/\.[^.]+$/, "")
             : description.trim().split("\n")[0].slice(0, 100)),
-        description: inputMode === "description" ? description.trim() : "",
-        members: memberNames.map(makeMember),
+        description: description.trim(),
+        members,
         document,
       });
       navigate(`/projects/${id}`);
@@ -215,52 +212,25 @@ export function Projects() {
                 </button>
               </div>
               <p className="text-muted-foreground mt-2 mb-6">
-                Sube un documento con el nombre, los detalles y los integrantes,
-                o describe el proyecto.
+                Sube un documento, describe lo que necesitas o combina ambos.
+                Completa al menos uno; los comentarios pueden aclarar cómo usar el archivo.
               </p>
-              <div
-                role="group"
-                aria-label="Origen del proyecto"
-                className="flex gap-2 mb-5"
-              >
-                <button
-                  type="button"
-                  aria-pressed={inputMode === "description"}
-                  className={
-                    inputMode === "description" ? "team-primary" : "team-button"
-                  }
-                  onClick={() => setInputMode("description")}
-                >
-                  Describir proyecto
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={inputMode === "document"}
-                  className={
-                    inputMode === "document" ? "team-primary" : "team-button"
-                  }
-                  onClick={() => setInputMode("document")}
-                >
-                  <FileText size={16} /> Subir documento
-                </button>
-              </div>
               <form onSubmit={submit} className="team-form">
-                {inputMode === "document" && (
                   <label>
-                    Documento del proyecto
+                    Documento del proyecto (opcional si escribes una descripción)
                     <input
+                      aria-label="Documento del proyecto"
                       type="file"
+                      ref={fileInput}
                       accept=".pdf,.docx,.txt,.md"
                       onChange={(e) => setFile(e.target.files?.[0])}
                     />
                     {file && <span className="text-sm text-primary">Archivo seleccionado: {file.name}</span>}
+                    {file && <button type="button" className="team-button" onClick={()=>{setFile(undefined);if(fileInput.current)fileInput.current.value='';}}>Quitar archivo</button>}
                     <span className="text-xs text-muted-foreground">
-                      PDF, DOCX, TXT o Markdown · Máximo 2 MB. Puedes crear el
-                      proyecto solo con el archivo. Su contenido se analizará al
-                      conectar los agentes.
+                      PDF, DOCX, TXT o Markdown · Máximo 2 MB.
                     </span>
                   </label>
-                )}
                 <label>
                   Nombre del proyecto (opcional)
                   <input
@@ -269,32 +239,32 @@ export function Projects() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder={
-                      inputMode === "document"
+                      file
                         ? "Usaremos el nombre del archivo mientras se analiza"
                         : "Ej. Plataforma de reservas"
                     }
                   />
                 </label>
-                {inputMode === "description" && (
                   <label>
-                    Descripción o minuta
+                    Descripción o comentarios (opcional si subes un documento)
                     <textarea
-                      required
+                      aria-label="Descripción o comentarios"
                       maxLength={30000}
                       rows={5}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Nombre del proyecto, objetivo, detalles, integrantes y fecha de entrega…"
+                      placeholder="Ej. Estos apuntes de química son para una exposición de 10 minutos. Necesitamos diapositivas y repartir los temas entre el equipo."
                     />
                   </label>
-                )}
                 <label>
-                  Nombres de los integrantes (opcional)
+                  Integrantes y roles (opcionales)
+                  <span className="text-xs text-muted-foreground">Escribe “yo” para incluir tu cuenta. Después pulsa el avatar de cada integrante para invitarlo.</span>
                   <textarea
+                    aria-label="Integrantes y roles"
                     rows={2}
                     value={names}
                     onChange={(e) => setNames(e.target.value)}
-                    placeholder="Si ya vienen en el documento o la descripción, puedes dejarlo vacío"
+                    placeholder={'yo: expositor\nLuis: investigación\nAna\nPuedes indicar solo nombres o dejarlo vacío.'}
                   />
                 </label>
                 {error && (
@@ -305,7 +275,7 @@ export function Projects() {
                 <button
                   disabled={
                     saving ||
-                    (inputMode === "document" ? !file : !description.trim())
+                    (!file && !description.trim())
                   }
                   className="team-primary justify-center"
                 >
