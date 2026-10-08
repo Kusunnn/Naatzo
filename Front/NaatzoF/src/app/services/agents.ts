@@ -110,10 +110,10 @@ export const agentApi = {
       body: form,
     });
   },
-  start: (id: string) =>
+  start: (id: string, autoApprovePlan = false) =>
     request<Run>(`/projects/${encodeURIComponent(id)}/runs`, {
       method: "POST",
-      body: JSON.stringify({ requireApproval: true }),
+      body: JSON.stringify({ mode: autoApprovePlan ? 'automatic' : 'supervised' }),
     }),
   run: async (id: string, signal?: AbortSignal) => {
     const result=await request<{run:Run;steps:AgentStep[]}>(`/runs/${encodeURIComponent(id)}`, {signal});

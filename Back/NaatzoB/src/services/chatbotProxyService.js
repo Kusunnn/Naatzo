@@ -9,7 +9,7 @@ async function callChatbot(path, init = {}) {
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },
-    signal: init.signal || AbortSignal.timeout(90000),
+    signal: init.signal || AbortSignal.timeout(240000),
   }); } catch (error) {
     if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new HttpError(504, 'El chatbot tardó demasiado en responder. Intenta de nuevo.');
     throw new HttpError(503, 'El servicio del chatbot está apagado o no se pudo conectar. Inicia NaatzoE o usa npm run start:all en el backend.');

@@ -56,6 +56,8 @@ export interface Project {
   runId?: string;
   teamId?: string;
   syncedMemberIds?: string[];
+  autoStartAgents?: boolean;
+  autoApprovePlan?: boolean;
 }
 export const columns: { key: KanbanColumn; label: string }[] = [
   { key: "todo", label: "Por hacer" },
@@ -102,7 +104,7 @@ interface ContextValue {
   importShared: (project: Project, localId?: string) => string;
   projects: Project[];
   addProject: (
-    p: Pick<Project, "title" | "description" | "members" | "document">,
+    p: Pick<Project, "title" | "description" | "members" | "document" | "autoStartAgents" | "autoApprovePlan">,
   ) => string;
   updateProject: (id: string, patch: Partial<Project>) => void;
   addTask: (id: string, task: Omit<KanbanTask, "id" | "projectId">) => void;

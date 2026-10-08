@@ -19,7 +19,7 @@ import {
   normalizeBoard,
   streamRun,
 } from "../services/agents";
-import { GithubConnection } from './GithubConnection';
+import { useRef } from 'react';
 import { isSelfParticipant } from '../services/projectProgress';
 
 const agents: { id: AgentId; title: string; description: string }[] = [
@@ -61,6 +61,7 @@ export function AgentPanel({ project }: { project: Project }) {
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const autoStarted = useRef<string | undefined>(undefined);
   const [progress, setProgress] = useState<Partial<Record<AgentId, string>>>({});
   const [streamRevision, setStreamRevision] = useState(0);
   const [llmMode, setLlmMode] = useState<string>();
@@ -248,12 +249,18 @@ export function AgentPanel({ project }: { project: Project }) {
       updateProject(project.id, { remoteId });
     }
     if (existingRemote && file) await agentApi.upload(remoteId, file, project.description);
-    const result = await agentApi.start(remoteId);
+    const result = await agentApi.start(remoteId, project.autoApprovePlan === true);
     const runId = result.runId || result.id;
     if (!runId) throw new Error("El backend no devolvió un runId válido.");
     updateProject(project.id, { remoteId, runId });
     setRun(result);
   }
+  useEffect(() => {
+    if (!project.autoStartAgents || project.runId || autoStarted.current === project.id) return;
+    autoStarted.current = project.id;
+    updateProject(project.id, { autoStartAgents: false });
+    void action(start);
+  }, [project.id, project.autoStartAgents, project.runId]);
   const active =
     run && !["failed", "completed", "cancelled"].includes(run.status);
   return (
@@ -268,12 +275,12 @@ export function AgentPanel({ project }: { project: Project }) {
           </span>
         </div>
         <p className="text-muted-foreground text-sm mb-6">
-          La minuta se envía al backend de Naatzo. Revisa el plan antes de
-          autorizar la creación del entorno y los avisos.
+          {project.autoApprovePlan
+            ? 'Aprobación automática activada: los agentes continuarán con el entorno y los avisos sin pausar para revisar el plan.'
+            : 'La minuta se envía al backend de Naatzo. Revisa el plan antes de autorizar la creación del entorno y los avisos.'}
         </p>
         {llmMode === 'mock' && <p role="status" className="text-sm p-3 mb-4 bg-secondary rounded-xl">Modo de demostración: los agentes generan ejemplos. Falta configurar la clave de IA en el servidor para analizar tu proyecto con el modelo real.</p>}
         {llmMode === 'unavailable' && <p role="status" className="team-error">No se pudo comprobar la conexión con los agentes.</p>}
-        <GithubConnection />
         {agents.map((a) => {
           const step = steps.find((s) => s.agent === a.id);
           return (

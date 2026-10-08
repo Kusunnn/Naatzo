@@ -122,6 +122,7 @@ router.post(
       question,
       sessionId,
       history,
+      userContext: req.body?.userContext,
       topK: topK ? Number(topK) : undefined,
     });
 
@@ -168,6 +169,7 @@ router.post(
         question,
         sessionId,
         history,
+        userContext: req.body?.userContext,
         topK: topK ? Number(topK) : undefined,
         onChunk: (evt) => {
           if (clientClosed) return;

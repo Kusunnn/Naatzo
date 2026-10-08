@@ -60,6 +60,7 @@ async function generateText({
   userPrompt,
   temperature = 0.3,
   maxOutputTokens = 700,
+  completeResponse = false,
 }) {
   return withKeyRotation(pool(), async (apiKey) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
@@ -72,6 +73,8 @@ async function generateText({
       generationConfig: { temperature, maxOutputTokens },
     };
 
+    let combined = '';
+    for (let attempt = 0; attempt < (completeResponse ? 3 : 1); attempt++) {
     const response = await withRetry(
       () =>
         axios.post(url, body, {
@@ -86,10 +89,16 @@ async function generateText({
       },
     );
 
-    return (
-      response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-      fallbackMessage
-    );
+    const candidate = response.data?.candidates?.[0];
+    const text = (candidate?.content?.parts || []).filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('');
+    combined += text;
+    if (candidate?.finishReason !== 'MAX_TOKENS' || !completeResponse) return combined.trim() || fallbackMessage;
+    if (!text) break;
+    body.contents.push({ role: 'model', parts: [{ text }] }, {
+      role: 'user', parts: [{ text: 'Continúa exactamente donde te quedaste, sin repetir ni reiniciar la respuesta. Termina la explicación y los bloques Markdown abiertos.' }],
+    });
+    }
+    return `${combined.trim()}\n\n> La respuesta alcanzó el límite de extensión. Pídeme continuar para completar lo que falta.`;
   });
 }
 

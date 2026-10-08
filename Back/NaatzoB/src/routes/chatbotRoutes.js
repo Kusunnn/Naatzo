@@ -11,7 +11,7 @@ const { receiveFile } = require('../modules/team/utils/documents');
 const { requireSession } = require('../services/collaborationService');
 
 router.get("/health", health);
-router.post("/chat", ask);
+router.post("/chat", requireSession, ask);
 router.post("/files", requireSession, receiveFile, upload);
 router.get("/chat/:userId", listMessages);
 

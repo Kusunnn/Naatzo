@@ -3,6 +3,7 @@ const { readDb, writeDb } = require("../repositories/dbRepository");
 const { HttpError } = require("../utils/httpError");
 const { createId } = require("../utils/id");
 const { extractText } = require('../modules/team/utils/documents');
+const { buildChatbotContext } = require('../services/chatbotContextService');
 
 async function getOrCreateSession(userId) {
   const db = await readDb();
@@ -93,17 +94,20 @@ async function health(req, res, next) {
 async function ask(req, res, next) {
   try {
     const { userId, message } = req.body;
+    if (req.user && userId !== req.user.id) throw new HttpError(403, 'No puedes consultar el chat de otra cuenta');
     if (!userId || !message) {
       throw new HttpError(400, "userId y message son requeridos");
     }
 
     const { session } = await getOrCreateSession(userId);
+    const userContext = await buildChatbotContext(await readDb(), userId, message);
 
     const result = await callChatbot("/chat", {
       method: "POST",
       body: JSON.stringify({
         question: String(message),
         sessionId: session.sessionId,
+        userContext,
       }),
     });
 

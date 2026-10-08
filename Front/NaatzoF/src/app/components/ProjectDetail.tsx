@@ -33,7 +33,8 @@ import "./team.css";
 export function ProjectDetail() {
   const { id } = useParams();
   const { user } = useAuth();
-  const isBoardPage = useLocation().pathname.startsWith("/board/");
+  const location = useLocation();
+  const isBoardPage = location.pathname.startsWith("/board/");
   const {
     projects,
     addTask,
@@ -44,7 +45,7 @@ export function ProjectDetail() {
     storageError,
   } = useProjects();
   const project = projects.find((p) => p.id === id);
-  const [tab, setTab] = useState("board");
+  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') === 'agents' ? 'agents' : 'board');
   const [query, setQuery] = useState("");
   const [assignee, setAssignee] = useState("");
   const [priority, setPriority] = useState("");

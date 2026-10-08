@@ -11,6 +11,7 @@ import {
 import { makeMember, useProjects } from "../contexts/ProjectContext";
 import "./team.css";
 import { MetricCard } from "./MetricCard";
+import { GithubConnection } from './GithubConnection';
 import { useAuth } from '../contexts/AuthContext';
 import { isSelfParticipant } from '../services/projectProgress';
 import { parseParticipants } from '../services/participantInput';
@@ -22,6 +23,7 @@ export function Projects() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [autoApprovePlan, setAutoApprovePlan] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [names, setNames] = useState("");
@@ -29,6 +31,7 @@ export function Projects() {
   const fileInput=useRef<HTMLInputElement>(null);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     setError("");
     setSaving(true);
     try {
@@ -66,8 +69,10 @@ export function Projects() {
         description: description.trim(),
         members,
         document,
+        autoStartAgents: true,
+        autoApprovePlan,
       });
-      navigate(`/projects/${id}`);
+      navigate(`/projects/${id}?tab=agents`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -265,6 +270,24 @@ export function Projects() {
                     placeholder={'yo: expositor\nLuis: investigación\nAna\nAgrega al menos un nombre. Los roles son opcionales.'}
                   />
                 </label>
+                <details className="border-t border-border pt-4">
+                  <summary className="cursor-pointer font-medium">Opciones avanzadas</summary>
+                  <div className="mt-4">
+                    <label className="flex gap-2 items-start">
+                      <input type="checkbox" checked={autoApprovePlan} onChange={e => setAutoApprovePlan(e.target.checked)} aria-describedby="auto-approve-description" />
+                      <span>Aprobar todo automáticamente</span>
+                    </label>
+                    <p id="auto-approve-description" className="text-sm text-muted-foreground mt-2">
+                      Continuar sin revisar el plan del Planificador. Autorizo crear el repositorio y enviar los correos si las integraciones están configuradas.
+                    </p>
+                  </div>
+                  <div className="mt-4"><GithubConnection /></div>
+                </details>
+                <p className="text-sm text-muted-foreground">
+                  {autoApprovePlan
+                    ? 'Al crear el proyecto, los agentes continuarán automáticamente sin esperar tu aprobación del plan.'
+                    : 'Al crear el proyecto se iniciará el análisis. Podrás revisar el plan antes de crear el repositorio y enviar avisos.'}
+                </p>
                 {error && (
                   <p role="alert" className="team-error">
                     {error}

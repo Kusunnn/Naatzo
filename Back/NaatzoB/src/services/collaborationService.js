@@ -78,6 +78,8 @@ function cleanSnapshot(input, user, current) {
     if(Buffer.from(encoded,'base64').length>2*1024*1024)throw new HttpError(413,'El documento debe pesar como máximo 2 MB.');
     snapshot.document={name:document.name.slice(0,255),data:document.data};
   }else if(current?.snapshot.document) snapshot.document=current.snapshot.document;
+  snapshot.autoApprovePlan = current && current.owner_id !== user.id
+    ? current.snapshot.autoApprovePlan === true : input.autoApprovePlan === true;
   // Agent identifiers are persisted for the owner's next session. Access to
   // those resources is still checked independently by the team API.
   for(const field of ['remoteId','runId','teamId']) {
