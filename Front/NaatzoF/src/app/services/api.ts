@@ -11,14 +11,15 @@ export class ApiError extends Error {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
   const requestHeaders = new Headers(headers);
-  requestHeaders.set('Content-Type', 'application/json');
+  const multipart = body instanceof FormData;
+  if (!multipart) requestHeaders.set('Content-Type', 'application/json');
   const token = sessionStorage.getItem('naatzo-token');
   if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers: requestHeaders,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: multipart ? body : body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {

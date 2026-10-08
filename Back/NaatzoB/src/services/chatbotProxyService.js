@@ -22,6 +22,9 @@ async function callChatbot(path, init = {}) {
     if (typeof reason === 'string' && /API_KEY.*(no definida|en .env)|Configura LLM_API_KEY/i.test(reason)) {
       throw new HttpError(503, 'Falta configurar la clave de Gemini en NaatzoE/.env (LLM_API_KEY y EMBEDDINGS_API_KEY).');
     }
+    if (typeof reason === 'string' && /Todos los embeddings fallaron/i.test(reason)) {
+      throw new HttpError(503, 'No se pudo procesar el documento con el servicio de IA. Revisa la clave de embeddings y los créditos del proveedor en NaatzoE.');
+    }
     if (response.status === 429) throw new HttpError(429, 'El servicio de IA alcanzó su límite de uso. Intenta más tarde.');
     throw new HttpError(502, `El servicio del chatbot no pudo responder (estado ${response.status}).`);
   }

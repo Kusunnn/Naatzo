@@ -134,9 +134,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setStorageError("");
     setSyncStatus({});
     let active = true;
-    if (user && sessionStorage.getItem('naatzo-token')) {
+    let refreshing = false;
+    const refresh = () => {
+      if (!active || refreshing || !user || !sessionStorage.getItem('naatzo-token')) return;
+      refreshing = true;
       apiRequest<{projects: Project[]}>('/collaboration/projects').then(result => {
         if (!active || !Array.isArray(result.projects)) return;
+        setStorageError('');
         setStore(prev => {
           result.projects=result.projects.filter(p=>!deleting.current.has(`${key}:${p.id}`));
           const local = (prev.key === key ? prev.projects : load(key)).filter(p=>!deleting.current.has(`${key}:${p.id}`)&&(!p.sharedId||p.syncPending||result.projects.some(remote=>remote.sharedId===p.sharedId)));
@@ -149,9 +153,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           try {localStorage.setItem(key,JSON.stringify(next));} catch {setStorageError('No se pudo guardar el proyecto compartido en este navegador.');}
           return {key,projects:next};
         });
-      }).catch(() => {if(active)setStorageError('No se pudieron consultar los proyectos compartidos. Inicia sesión de nuevo o comprueba la conexión.');});
-    }
-    return () => {active=false;};
+      }).catch(() => {if(active)setStorageError('No se pudieron consultar los proyectos compartidos. Inicia sesión de nuevo o comprueba la conexión.');}).finally(() => {refreshing=false;});
+    };
+    const onVisible = () => {if (document.visibilityState === 'visible') refresh();};
+    refresh();
+    const timer = window.setInterval(onVisible, 30000);
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active=false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [key]);
   const save = (fn: (prev: Project[]) => Project[]) =>
     setStore((prev) => {

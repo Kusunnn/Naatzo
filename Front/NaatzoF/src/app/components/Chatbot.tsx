@@ -31,13 +31,14 @@ export function Chatbot() {
   ]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { tasks } = useTasks();
   const { user } = useAuth();
 
   const handleSendMessage = async () => {
-    if (!input.trim() || !user?.id || isSending) return;
+    if (!input.trim() || !user?.id || isSending || isUploading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -71,12 +72,12 @@ export function Chatbot() {
           },
         ]);
       }
-    } catch {
+    } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
-          text: 'No pude conectar con el servicio de chatbot. Intenta nuevamente en unos segundos.',
+          text: error instanceof Error ? error.message : 'No pude conectar con el servicio de chatbot. Intenta nuevamente.',
           sender: 'bot',
           timestamp: new Date(),
         },
@@ -87,21 +88,22 @@ export function Chatbot() {
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fileInput = event.currentTarget;
     const file = event.target.files?.[0];
     if (!file || !user?.id) {
       return;
     }
 
-    const content = await file.text();
-
+    setIsUploading(true);
     try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('El archivo supera el límite de 5 MB.');
+      if (!/\.(pdf|docx|txt|md)$/i.test(file.name)) throw new Error('Usa PDF, DOCX, TXT o Markdown. Guarda los archivos .doc como .docx.');
+      const body = new FormData();
+      body.append('userId', user.id);
+      body.append('file', file);
       await apiRequest<{ file: { id: string } }>('/chatbot/files', {
         method: 'POST',
-        body: {
-          userId: user.id,
-          fileName: file.name,
-          content,
-        },
+        body,
       });
 
       setMessages((prev) => [
@@ -113,18 +115,19 @@ export function Chatbot() {
           timestamp: new Date(),
         },
       ]);
-    } catch {
+    } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
           id: `file-error-${Date.now()}`,
-          text: `No pude subir el archivo "${file.name}". Intenta nuevamente.`,
+          text: `No pude subir el archivo "${file.name}". ${error instanceof Error ? error.message : 'Intenta nuevamente.'}`,
           sender: 'bot',
           timestamp: new Date(),
         },
       ]);
     } finally {
-      event.target.value = '';
+      fileInput.value = '';
+      setIsUploading(false);
     }
   };
 
@@ -212,7 +215,10 @@ export function Chatbot() {
             <div className="flex gap-2 md:gap-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 md:p-3 bg-secondary rounded-xl hover:bg-muted transition-colors shadow-sm hidden md:block"
+                aria-label="Adjuntar archivo"
+                title="Adjuntar PDF, DOCX o texto (máximo 5 MB)"
+                disabled={isUploading || isSending}
+                className="p-2 md:p-3 bg-secondary rounded-xl hover:bg-muted transition-colors shadow-sm disabled:opacity-50"
               >
                 <Paperclip className="w-5 h-5 text-foreground" />
               </button>
@@ -220,7 +226,7 @@ export function Chatbot() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.docx,.txt,.md"
                 onChange={handleFileUpload}
               />
               <input
@@ -228,12 +234,12 @@ export function Chatbot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Escribe tu mensaje..."
+                placeholder={isUploading ? 'Procesando archivo...' : 'Escribe tu mensaje...'}
                 className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-input-background rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-ring shadow-sm text-sm md:text-base"
               />
               <button
                 onClick={handleSendMessage}
-                disabled={isSending}
+                disabled={isSending || isUploading}
                 className="px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-primary to-accent text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
               >
                 <Send className="w-4 h-4 md:w-5 md:h-5" />

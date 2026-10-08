@@ -2,6 +2,7 @@ const { callChatbot } = require("../services/chatbotProxyService");
 const { readDb, writeDb } = require("../repositories/dbRepository");
 const { HttpError } = require("../utils/httpError");
 const { createId } = require("../utils/id");
+const { extractText } = require('../modules/team/utils/documents');
 
 async function getOrCreateSession(userId) {
   const db = await readDb();
@@ -127,7 +128,16 @@ async function ask(req, res, next) {
 
 async function upload(req, res, next) {
   try {
-    const { userId, fileName, content } = req.body;
+    let { userId, fileName, content } = req.body || {};
+    if (req.user && userId && userId !== req.user.id) throw new HttpError(403, 'No puedes subir archivos para otra cuenta');
+    userId = req.user?.id || userId;
+    if (req.file) {
+      const document = await extractText(req.file);
+      fileName = document.filename;
+      content = document.text;
+    } else if (fileName && !/\.(txt|md)$/i.test(fileName)) {
+      throw new HttpError(415, 'Adjunta el archivo original para leer PDF o DOCX.');
+    }
     if (!userId || !fileName || !content) {
       throw new HttpError(400, "userId, fileName y content son requeridos");
     }
@@ -136,6 +146,7 @@ async function upload(req, res, next) {
       method: "POST",
       body: JSON.stringify({
         title: String(fileName),
+        url: `user-upload://${userId}/${createId('upload')}`,
         text: String(content),
         sourceName: `Archivo de ${userId}`,
         resourceType: "other",
@@ -148,8 +159,8 @@ async function upload(req, res, next) {
       userId,
       fileName: String(fileName),
       contentPreview: String(content).slice(0, 500),
-      resourceId: result?.resource?.id || null,
-      documentId: result?.document?.id || null,
+      resourceId: result?.resourceId || result?.resource?.id || null,
+      documentId: result?.documentId || result?.document?.id || null,
       createdAt: new Date().toISOString(),
     };
 

@@ -8,6 +8,8 @@ test('chatbot proxy reports disconnected service and missing keys clearly',async
  await assert.rejects(callChatbot('/chat'),e=>e.statusCode===503 && /apagado/.test(e.message));
  global.fetch=async()=>new Response(JSON.stringify({error:'EMBEDDINGS_API_KEY no definida en .env'}),{status:500});
  await assert.rejects(callChatbot('/chat'),e=>e.statusCode===503 && /clave de Gemini/.test(e.message));
+ global.fetch=async()=>new Response(JSON.stringify({error:'Todos los embeddings fallaron; no se ingesto nada'}),{status:500});
+ await assert.rejects(callChatbot('/ingest'),e=>e.statusCode===503 && /clave de embeddings/.test(e.message));
  global.fetch=async()=>new Response('internal provider details',{status:500});
  await assert.rejects(callChatbot('/chat'),e=>e.statusCode===502 && !e.message.includes('internal provider details'));
  global.fetch=async()=>new Response(JSON.stringify({answer:'Hola'}),{status:200,headers:{'Content-Type':'application/json'}});
