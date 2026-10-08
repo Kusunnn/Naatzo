@@ -5,7 +5,8 @@ for (const type of Object.keys(catalog)) {
   const result = renderEmail(type, sample);
   assert.ok(result.subject && result.text && result.html);
   assert.ok(result.text.includes(sample.recipientName));
-  assert.ok(result.html.includes('María &lt;script&gt;'));
+  assert.ok(result.html.includes('Mar&#237;a &lt;script&gt;'));
+  assert.ok(!/[^\x00-\x7f]/.test(result.html));
   assert.ok(!result.html.includes('<script>'));
   assert.ok(!/undefined|\[object Object\]/.test(result.text));
   for (const field of catalog[type].required) {

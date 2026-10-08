@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mail, UserRoundCheck, X } from 'lucide-react';
 import { Project, TeamMember, useProjects } from '../contexts/ProjectContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,12 @@ export function ParticipantActions({project,member,onClose}:{project:Project;mem
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const [url,setUrl]=useState('');
+  const [emailAvailable,setEmailAvailable]=useState<boolean>();
+  useEffect(()=>{
+    let active=true;
+    apiRequest<{emailConfigured:boolean}>('/collaboration/status').then(result=>{if(active)setEmailAvailable(result.emailConfigured);}).catch(()=>{});
+    return ()=>{active=false;};
+  },[]);
   const mine=member.userId===user?.id;
   const linked=Boolean(member.userId);
   const owner=project.ownerUserId===user?.id;
@@ -33,7 +39,9 @@ export function ParticipantActions({project,member,onClose}:{project:Project;mem
           const result=await apiRequest<{url:string;delivery:{sent:boolean;reason?:string}}>(`/collaboration/projects/${project.sharedId}/invitations`,{method:'POST',body:{email:email.trim(),memberId:member.id}});
           setUrl(result.url);setMessage(result.delivery.sent?'Invitación enviada. Al aceptarla, su cuenta quedará vinculada a este participante y sus tareas.':result.delivery.reason||'Puedes compartir el enlace de invitación.');
         });}}>
-          <label>Correo de {member.name}<input autoFocus required type="email" maxLength={254} value={email} onChange={event=>setEmail(event.target.value)} placeholder="integrante@correo.com"/></label>
+          {emailAvailable===true&&<p className="text-xs text-muted-foreground">Servicio de correo disponible.</p>}
+          {emailAvailable===false&&<p role="alert" className="team-error">Este servidor no tiene el correo configurado. Revisa la configuración SMTP del backend.</p>}
+          <label>Correo de {member.name}<input autoFocus required type="email" maxLength={254} value={email} onChange={event=>{setEmail(event.target.value);setMessage('');}} placeholder="integrante@correo.com"/></label>
           <button className="team-primary" disabled={busy||!ready}><Mail size={17}/> {busy?'Procesando…':'Enviar invitación'}</button>
         </form>}
         {!owner&&<p className="text-sm text-muted-foreground">El propietario del proyecto puede enviar invitaciones.</p>}

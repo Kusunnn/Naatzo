@@ -30,6 +30,7 @@ router.post('/projects', asyncRoute(async (req,res) => {
   const result = await db.query('INSERT INTO naatzo_shared_projects(id,owner_id,snapshot) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING RETURNING *',[id,req.user.id,snapshot]);
   const row = result.rows[0] || await service.readProject(id,req.user,true);
   res.status(result.rows.length ? 201 : 200).json({ project: service.view(row) });
+  if(result.rows.length)require('../services/emailReminders').notifyAssignments({snapshot:{tasks:[]}},row).catch(()=>console.error('[email] Falló el aviso de la primera asignación.'));
 }));
 router.get('/projects/:id', asyncRoute(async (req,res) => res.json({ project: service.view(await service.readProject(req.params.id,req.user)) })));
 router.delete('/projects/:id',asyncRoute(async(req,res)=>{
@@ -96,7 +97,11 @@ router.post('/projects/:id/invitations', asyncRoute(async (req,res) => {
   const base = process.env.APP_URL || 'http://localhost:5173';
   const url = `${base.replace(/\/$/,'')}/invite/${token}`;
   let delivery = { sent:false, reason: email ? 'Correo no configurado. Comparte el enlace.' : 'Enlace creado.' };
-  if (email) { try { delivery=await mail.sendEmail({to:email,...renderEmail('invitation',{inviterName:req.user.name,projectName:project.snapshot.title,expiresAt:result.rows[0].expires_at,url})}); } catch { delivery={sent:false,reason:'No se pudo enviar el correo. Puedes compartir el enlace o intentar otra invitación.'}; } }
+  if (email) {
+    try { delivery=await mail.sendEmail({to:email,...renderEmail('invitation',{inviterName:req.user.name,projectName:project.snapshot.title,expiresAt:result.rows[0].expires_at,url})}); }
+    catch(error) { delivery={sent:false,reason:mail.describeSendError(error)};console.error(`[email] Invitación ${id}: ${error.code||'SEND_FAILED'}`); }
+    await db.query('UPDATE naatzo_invitations SET delivery_status=$2,delivery_error=$3,mail_message_id=$4 WHERE id=$1',[id,delivery.sent?'sent':'failed',delivery.reason||null,delivery.messageId||null]);
+  }
   res.status(201).json({ id,url,email,expiresAt:result.rows[0].expires_at,delivery });
 }));
 router.delete('/projects/:id/invitations/:invitationId', asyncRoute(async (req,res) => {

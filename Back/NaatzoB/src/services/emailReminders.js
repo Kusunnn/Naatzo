@@ -11,7 +11,8 @@ async function notifyAssignments(before,after) {
     const old=before.snapshot.tasks.find(previous=>previous.id===task.id);
     if(old?.assigneeId===task.assigneeId)continue;
     const member=after.snapshot.members.find(m=>m.id===task.assigneeId);const user=await recipient(member?.userId);if(!user?.email)continue;
-    await mail.sendOnce(`assignment:${after.id}:${task.id}:${after.version}:${member.userId}`,{to:user.email,...renderEmail('taskAssigned',{recipientName:user.name,taskName:task.title,projectName:after.snapshot.title,dueAt:task.dueDate,priority:task.priority,url:`${process.env.APP_URL || 'http://localhost:5173'}/board/${after.id}`})});
+    try {await mail.sendOnce(`assignment:${after.id}:${task.id}:${after.version}:${member.userId}`,{to:user.email,...renderEmail('taskAssigned',{recipientName:user.name,taskName:task.title,projectName:after.snapshot.title,dueAt:task.dueDate,priority:task.priority,url:`${process.env.APP_URL || 'http://localhost:5173'}/board/${after.id}`})});}
+    catch(error){console.error(`[email] Asignación ${task.id}: ${error.code||'SEND_FAILED'}`);}
   }
 }
 async function checkReminders(now=new Date()) {
@@ -24,7 +25,8 @@ async function checkReminders(now=new Date()) {
     const diff=due-now;const window=diff<=0?{key:'overdue'}:windows.filter(w=>diff<=w.ms).at(-1);if(!window)continue;
     const user=await recipient(task.userId);if(!user?.email)continue;
     const type=window.key==='overdue'?'deadlineOverdue':window.key==='1h'?'deadlineUrgent':'deadlineReminder';
-    await mail.sendOnce(`reminder:${task.scope}:${task.id}:${due.toISOString()}:${window.key}:${task.userId}`,{to:user.email,...renderEmail(type,{recipientName:user.name,taskName:task.title,projectName:task.projectTitle,dueAt:due,url:`${process.env.APP_URL || 'http://localhost:5173'}/${task.scope==='personal'?'calendar':`board/${task.scope}`}`})});
+    try {await mail.sendOnce(`reminder:${task.scope}:${task.id}:${due.toISOString()}:${window.key}:${task.userId}`,{to:user.email,...renderEmail(type,{recipientName:user.name,taskName:task.title,projectName:task.projectTitle,dueAt:due,url:`${process.env.APP_URL || 'http://localhost:5173'}/${task.scope==='personal'?'calendar':`board/${task.scope}`}`})});}
+    catch(error){console.error(`[email] Recordatorio ${task.id}: ${error.code||'SEND_FAILED'}`);}
   }
 }
 function startReminders() { if(!mail.configured())return;let running=false;const tick=async()=>{if(running)return;running=true;try{await checkReminders()}catch{console.error('[email] Falló la revisión de recordatorios.')}finally{running=false}};const timer=setInterval(tick,60000);timer.unref();tick();return timer; }

@@ -12,6 +12,7 @@ nodemailer.createTransport = () => ({
     assert.match(mime, /Content-Transfer-Encoding: base64/i);
     const body = mime.split(/\r?\n\r?\n/).slice(1).join('\n\n').replace(/\s/g, '');
     assert.equal(Buffer.from(body, 'base64').toString('utf8').trimEnd(), options.text);
+    return {accepted:[options.to],rejected:[],messageId:result.messageId};
   },
 });
 process.env.SMTP_HOST = 'example.invalid';

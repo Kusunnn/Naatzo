@@ -3,6 +3,8 @@ const assert=require('node:assert/strict');
 const {smtpConfig}=require('../src/config/smtp');
 
 test('SMTP uses either environment naming convention and validates credentials',t=>{
+  const previousMode=process.env.NODE_ENV;process.env.NODE_ENV='test';
+  t.after(()=>{if(previousMode===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousMode;});
   const keys=['SMTP_HOST','SMTP_PORT','SMTP_SECURE','SMTP_USER','SMTP_PASSWORD','SMTP_PASS','EMAIL_FROM','SMTP_FROM'];
   const saved=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
   t.after(()=>{for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}});

@@ -90,7 +90,10 @@ function renderEmail(type, data = {}) {
   const text = `${greeting}\n\n${body}\n\n${template.action}:\n${url.href}\n\n${footer}`;
   const paragraphs = `${greeting}\n\n${body}`.split('\n\n').map(p => `<p style="line-height:1.6">${escape(p).replace(/\n/g, '<br>')}</p>`).join('');
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"></head><body style="margin:0;background:#f5f6f8;font-family:Arial,sans-serif;color:#242536"><main style="max-width:580px;margin:24px auto;padding:28px;background:#fff;border-radius:16px"><div style="font-size:24px;font-weight:bold;color:#526f1b">Naatzo</div><h1 style="font-size:22px">${escape(template.title)}</h1>${paragraphs}<p style="margin:28px 0"><a href="${escape(url.href)}" style="display:inline-block;padding:12px 20px;background:#c4df77;color:#253514;text-decoration:none;border-radius:8px;font-weight:bold">${escape(template.action)}</a></p><p style="font-size:12px;line-height:1.6">Si el botón no funciona, abre este enlace:<br><a href="${escape(url.href)}" style="overflow-wrap:anywhere">${escape(url.href)}</a></p><hr style="border:0;border-top:1px solid #eee"><p style="font-size:12px;color:#666">${footer}</p></main></body></html>`;
-  return { subject, text, html };
+  // Numeric HTML entities remain readable even when an email client chooses
+  // the wrong character encoding. Plain text and headers remain UTF-8.
+  const encodedHtml=html.replace(/[^\x00-\x7f]/gu,char=>`&#${char.codePointAt(0)};`);
+  return { subject:subject.normalize('NFC'), text:text.normalize('NFC'), html:encodedHtml };
 }
 
 module.exports = { renderEmail, catalog };

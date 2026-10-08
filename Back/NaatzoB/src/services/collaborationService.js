@@ -9,6 +9,9 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS naatzo_invitations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES naatzo_shared_projects(id), token_hash TEXT UNIQUE NOT NULL, email TEXT, expires_at TIMESTAMPTZ NOT NULL, revoked BOOLEAN NOT NULL DEFAULT FALSE, accepted_by TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]);
     CREATE TABLE IF NOT EXISTS naatzo_email_log (key TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ALTER TABLE naatzo_invitations ADD COLUMN IF NOT EXISTS member_id TEXT;
+    ALTER TABLE naatzo_invitations ADD COLUMN IF NOT EXISTS delivery_status TEXT;
+    ALTER TABLE naatzo_invitations ADD COLUMN IF NOT EXISTS delivery_error TEXT;
+    ALTER TABLE naatzo_invitations ADD COLUMN IF NOT EXISTS mail_message_id TEXT;
   `).catch(error => { init = null; throw error; });
   await init;
 }
