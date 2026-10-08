@@ -105,7 +105,13 @@ async function createUser({ name, email, passwordHash }) {
   return mapUser(result.rows[0]);
 }
 
+async function findUserById(id) {
+  await ensureUserTable();
+  return mapUser((await db.query('SELECT id, name, email, password_hash, created_at FROM public.naatzo_users WHERE id = $1', [id])).rows[0]);
+}
+
 module.exports = {
+  findUserById,
   createUser,
   findUserByEmail,
   ensureUserTable,

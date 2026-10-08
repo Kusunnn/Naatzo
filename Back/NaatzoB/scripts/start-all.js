@@ -1,28 +1,30 @@
-const { spawn } = require("child_process");
-
-function run(name, command, args, env = {}) {
-  const child = spawn(command, args, {
-    stdio: "inherit",
-    shell: true,
-    env: { ...process.env, ...env },
+const { spawn } = require('child_process');
+const path = require('path');
+const backendDir = path.resolve(__dirname, '..');
+const children = [];
+let stopping = false;
+function shutdown(signal = 'SIGTERM') {
+  if (stopping) return;
+  stopping = true;
+  for (const child of children) if (child.exitCode === null) child.kill(signal);
+}
+function run(name, file) {
+  const child = spawn(process.execPath, [file], { cwd: backendDir, stdio: 'inherit' });
+  children.push(child);
+  child.on('error', error => {
+    console.error(`${name}: ${error.message}`);
+    process.exitCode = 1;
+    shutdown();
   });
-
-  child.on("exit", (code) => {
-    if (code !== 0) {
-      console.error(`${name} finalizo con codigo ${code}`);
+  child.on('exit', (code, signal) => {
+    if (!stopping) {
+      console.error(`${name} finalizó (${signal || code})`);
+      process.exitCode = code || 1;
+      shutdown();
     }
   });
-
-  return child;
 }
-
-const chatbot = run("chatbot", "node", ["../../NaatzoE/src/index.js"]);
-const backend = run("backend", "node", ["src/server.js"]);
-
-function shutdown(signal) {
-  chatbot.kill(signal);
-  backend.kill(signal);
-}
-
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+run('chatbot', path.resolve(backendDir, '../../NaatzoE/src/index.js'));
+run('backend', path.join(backendDir, 'src/server.js'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

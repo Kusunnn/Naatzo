@@ -24,7 +24,6 @@ module.exports = {
   databaseUrl: process.env.DATABASE_URL || "",
   databaseSsl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
   chatbotServiceUrl: process.env.CHATBOT_SERVICE_URL || "http://localhost:3000",
-  openLibraryBaseUrl: process.env.OPEN_LIBRARY_BASE_URL || "https://openlibrary.org",
   dataFilePath:
     process.env.DATA_FILE_PATH || path.join(__dirname, "..", "..", "data", "db.json"),
   mascotImageUrl:
