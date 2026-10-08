@@ -11,6 +11,7 @@
 //   - modo mock (LLM_PROVIDER=mock o sin llave) con respuestas fijas
 
 const axios = require("axios");
+const { z } = require("zod");
 const env = require("../config/env");
 const { withRetry, isRetryableAxiosError } = require("../utils/retry");
 const { KeyPool, parseKeys, withKeyRotation } = require("../utils/key-pool");
@@ -36,6 +37,10 @@ const shouldRetryExceptQuota = (err) => !isQuotaError(err) && isRetryableAxiosEr
 
 /** Error legible a partir de la respuesta de Gemini, sin datos de la llave. */
 function describeHttpError(err, model) {
+  if (env.LLM_PROVIDER === "ollama") {
+    const detail = err.response?.data?.error;
+    return `Ollama (${model}): ${detail || err.code || err.message}. Comprueba que Ollama esté abierto y el modelo descargado.`;
+  }
   const status = err?.response?.status;
   const detail = err?.response?.data?.error?.message;
   if (status === 503) return `Gemini (${model}) está temporalmente saturado (503). Se agotaron los reintentos automáticos; espera un momento y usa Reintentar paso fallido.${detail ? ` Detalle: ${detail}` : ""}`;
@@ -131,7 +136,7 @@ async function generateStructured({
     return useMock({ mockKey, mockInput, zodSchema, ctx, label: "mock" });
   }
 
-  let currentModel = model;
+  let currentModel = env.LLM_PROVIDER === "ollama" ? env.OLLAMA_MODEL : model;
   let prompt = user;
   let lastError;
 
@@ -139,16 +144,17 @@ async function generateStructured({
   for (let attempt = 1; attempt <= 2; attempt++) {
     let res;
     try {
-      res = await callGemini({
+      res = await (env.LLM_PROVIDER === "ollama" ? callOllama : callGemini)({
         model: currentModel,
         system,
         user: prompt,
         responseSchema,
+        zodSchema,
         temperature,
         maxOutputTokens,
       });
     } catch (err) {
-      if (isQuotaError(err) && fallbackModel && currentModel !== fallbackModel) {
+      if (env.LLM_PROVIDER === "gemini" && isQuotaError(err) && fallbackModel && currentModel !== fallbackModel) {
         console.warn(`[llm] Cuota agotada en ${currentModel}; se usa ${fallbackModel}`);
         currentModel = fallbackModel;
         attempt--; // el cambio de modelo no cuenta como reintento
@@ -156,7 +162,7 @@ async function generateStructured({
       }
       // Respaldo para la demo: si no hay internet o Gemini no responde, se
       // usa la respuesta fija en lugar de tirar la ejecucion.
-      if (env.DEMO_MODE && mock.has(mockKey)) {
+      if (env.LLM_PROVIDER === "gemini" && env.DEMO_MODE && mock.has(mockKey)) {
         console.warn(`[llm] ${describeHttpError(err, currentModel)}. Se usa la respuesta mock de respaldo.`);
         return useMock({ mockKey, mockInput, zodSchema, ctx, label: "mock-respaldo" });
       }
@@ -187,6 +193,28 @@ function useMock({ mockKey, mockInput, zodSchema, ctx, label }) {
     throw new Error(`La respuesta mock "${mockKey}" no cumple el esquema: ${result.error.message}`);
   }
   return result.data;
+}
+
+async function callOllama({ model, system, user, zodSchema, temperature, maxOutputTokens }) {
+  const format = z.toJSONSchema(zodSchema, { io: "input" });
+  const { data } = await axios.post(`${env.OLLAMA_BASE_URL.replace(/\/$/, "")}/api/chat`, {
+    model,
+    stream: false,
+    think: false,
+    format,
+    messages: [
+      { role: "system", content: `${system}\nDevuelve únicamente JSON conforme a este esquema: ${JSON.stringify(format)}` },
+      { role: "user", content: user },
+    ],
+    options: { temperature, num_predict: maxOutputTokens, num_ctx: 16384 },
+    keep_alive: "15m",
+  }, { timeout: env.OLLAMA_TIMEOUT_MS });
+  if (data.error) throw new Error(data.error);
+  return {
+    text: data.message?.content || "",
+    finishReason: data.done_reason === "stop" ? "STOP" : data.done_reason || "INCOMPLETE",
+    usage: { inputTokens: data.prompt_eval_count || 0, outputTokens: data.eval_count || 0 },
+  };
 }
 
 module.exports = { generateStructured };

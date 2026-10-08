@@ -31,9 +31,9 @@ router.get("/integrations", (req, res) => {
     ok: true,
     integrations: {
       llm: {
-        mode: env.LLM_MOCK ? "mock" : "gemini",
-        fastModel: env.LLM_MODEL_FAST,
-        smartModel: env.LLM_MODEL_SMART,
+        mode: env.LLM_MOCK ? "mock" : env.LLM_PROVIDER,
+        fastModel: env.LLM_PROVIDER === "ollama" ? env.OLLAMA_MODEL : env.LLM_MODEL_FAST,
+        smartModel: env.LLM_PROVIDER === "ollama" ? env.OLLAMA_MODEL : env.LLM_MODEL_SMART,
       },
       github: {
         configured: Boolean(env.GITHUB_TOKEN && env.GITHUB_OWNER),

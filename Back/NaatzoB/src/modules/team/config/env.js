@@ -40,7 +40,10 @@ const schema = z.object({
     .default("naatzo_team"),
 
   // Modelos
-  LLM_PROVIDER: z.enum(["gemini", "mock"]).default("gemini"),
+  LLM_PROVIDER: z.enum(["gemini", "ollama", "mock"]).default("gemini"),
+  OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434"),
+  OLLAMA_MODEL: z.string().min(1).default("qwen3:8b"),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
   LLM_API_KEY: z.string().optional(),
   LLM_MODEL_FAST: z.string().default("gemini-2.5-flash"),
   LLM_MODEL_SMART: z.string().default("gemini-2.5-flash"),
@@ -94,7 +97,7 @@ if (!parsed.success) {
 const env = parsed.data;
 
 // Sin llave de Gemini no hay forma de llamar al modelo: usamos el modo mock.
-env.LLM_MOCK = env.LLM_PROVIDER === "mock" || !env.LLM_API_KEY;
+env.LLM_MOCK = env.LLM_PROVIDER === "mock" || (env.LLM_PROVIDER === "gemini" && !env.LLM_API_KEY);
 if (env.LLM_PROVIDER === "gemini" && !env.LLM_API_KEY) {
   console.warn("[env] LLM_API_KEY vacia: se usa el modo mock del LLM.");
 }
