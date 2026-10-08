@@ -198,7 +198,8 @@ responses.replanExplanation = (facts) => {
 };
 
 function task(key, title, skill, estimateHours, priority, dependsOn, mentionedOwner) {
-  return { key, title, description: "", skill, estimateHours, priority, dependsOn, mentionedOwner };
+  return { key, title, description: "", skill, estimateHours, priority, dependsOn, mentionedOwner,
+    acceptanceCriteria: [`Se demuestra el resultado de: ${title}.`, "Las pruebas del caso principal y de un caso de error pasan."] };
 }
 
 function has(key) {

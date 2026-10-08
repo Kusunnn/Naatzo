@@ -30,7 +30,7 @@ const ProjectSchema = z
       .string()
       .trim()
       .min(20, "La minuta es muy corta")
-      .max(30_000, "La minuta no puede pasar de 30,000 caracteres"),
+      .max(MAX_CHARS, `La minuta no puede pasar de ${MAX_CHARS} caracteres`),
     startDate: isoDate.optional(),
     deadline: isoDate.optional(),
   })
@@ -106,6 +106,7 @@ function describeDocument(d) {
     pages: d.pages,
     chars: d.chars,
     truncated: d.truncated,
+    chunks: d.chunks,
     warning: d.truncated
       ? `El documento tiene ${d.chars} caracteres; se usan los primeros ${MAX_CHARS}`
       : null,

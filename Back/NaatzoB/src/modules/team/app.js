@@ -61,6 +61,7 @@ app.use("/teams", requireAuth, teamsRouter);
 app.use("/members", requireAuth, membersRouter);
 app.use("/members", requireAuth, memberInvitesRouter);
 app.use("/me", requireAuth, meRoutes);
+app.use('/integrations', requireAuth, require('./routes/integrations.routes'));
 app.use("/projects", requireAuth, projectsRoutes);
 app.use("/projects", requireAuth, projectCardsRouter);
 app.use("/projects", requireAuth, projectNotificationsRouter);

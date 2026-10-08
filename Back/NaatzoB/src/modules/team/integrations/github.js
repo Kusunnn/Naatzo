@@ -7,9 +7,10 @@
 const { Octokit } = require("@octokit/rest");
 const env = require("../config/env");
 const { withRetry } = require("../utils/retry");
+const connection = require('./githubConnection');
 
-function isConfigured() {
-  return Boolean(env.GITHUB_TOKEN && env.GITHUB_OWNER);
+function isConfigured(userId) {
+  return Boolean(connection.account(userId) || (env.GITHUB_TOKEN && env.GITHUB_OWNER));
 }
 
 let _octokit = null;
@@ -26,12 +27,12 @@ function client() {
   return _octokit;
 }
 
-async function createRepo(name, description) {
+async function createRepo(name, description, octokit = client(), personal = false) {
   const params = { name, description: description.slice(0, 300), auto_init: true, private: false };
   const { data } =
-    env.GITHUB_OWNER_TYPE === "org"
-      ? await client().rest.repos.createInOrg({ org: env.GITHUB_OWNER, ...params })
-      : await client().rest.repos.createForAuthenticatedUser(params);
+    !personal && env.GITHUB_OWNER_TYPE === "org"
+      ? await octokit.rest.repos.createInOrg({ org: env.GITHUB_OWNER, ...params })
+      : await octokit.rest.repos.createForAuthenticatedUser(params);
   return data;
 }
 
@@ -39,21 +40,23 @@ async function createRepo(name, description) {
  * Crea el repo (si el nombre ya existe, prueba con un sufijo) y sube los
  * archivos en un commit. Regresa { url, name, commitSha }.
  */
-async function publishRepo({ name, fallbackName, description, files, onProgress = () => {} }) {
+async function publishRepo({ name, fallbackName, description, files, userId, onProgress = () => {} }) {
+  const personal = connection.account(userId);
+  const octokit = personal ? new Octokit({auth:personal.token,request:{timeout:20000},log:{debug(){},info(){},warn(){},error(){}}}) : client();
   let repo;
   try {
-    repo = await createRepo(name, description);
+    repo = await createRepo(name, description, octokit, Boolean(personal));
   } catch (err) {
     // 422: ya existe un repo con ese nombre
     if (err.status !== 422 || !fallbackName) throw err;
     onProgress(`Ya existe ${name}; se usa ${fallbackName}`);
-    repo = await createRepo(fallbackName, description);
+    repo = await createRepo(fallbackName, description, octokit, Boolean(personal));
   }
 
   const owner = repo.owner.login;
   const repoName = repo.name;
   const branch = repo.default_branch;
-  const gh = client().rest.git;
+  const gh = octokit.rest.git;
 
   // Recien creado, el ref puede tardar unos segundos en existir.
   const { data: ref } = await withRetry(() => gh.getRef({ owner, repo: repoName, ref: `heads/${branch}` }), {
