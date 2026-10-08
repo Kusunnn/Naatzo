@@ -34,7 +34,9 @@ export function Register() {
     }
 
     if (await register(name, email, password)) {
-      navigate('/home');
+      const destination = sessionStorage.getItem('naatzo-invite-return');
+      sessionStorage.removeItem('naatzo-invite-return');
+      navigate(destination?.startsWith('/invite/') ? destination : '/home');
     } else {
       setError('No se pudo crear la cuenta. Verifica los datos o intenta con otro correo.');
     }

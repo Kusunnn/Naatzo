@@ -20,7 +20,9 @@ export function Login() {
     setIsSubmitting(true);
 
     if (await login(email, password)) {
-      navigate('/home');
+      const destination = sessionStorage.getItem('naatzo-invite-return');
+      sessionStorage.removeItem('naatzo-invite-return');
+      navigate(destination?.startsWith('/invite/') ? destination : '/home');
     } else {
       setError('Credenciales inválidas. Verifica tu correo y contraseña.');
     }

@@ -8,6 +8,7 @@ const {
 } = require("../controllers/taskController");
 
 const router = express.Router();
+router.use(require('../services/collaborationService').requireSession);
 
 router.get("/", listTasks);
 router.post("/", createTask);

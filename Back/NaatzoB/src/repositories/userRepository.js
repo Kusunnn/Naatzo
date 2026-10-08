@@ -27,7 +27,7 @@ async function ensureUserTable() {
       `);
 
       await migrateLegacyJsonUsers();
-    })();
+    })().catch(error => { initPromise = null; throw error; });
   }
 
   return initPromise;
@@ -105,8 +105,15 @@ async function createUser({ name, email, passwordHash }) {
   return mapUser(result.rows[0]);
 }
 
+async function findUserById(id) {
+  await ensureUserTable();
+  const result = await db.query('SELECT id,name,email,password_hash,created_at FROM public.naatzo_users WHERE id::text=$1', [id]);
+  return mapUser(result.rows[0]);
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
+  findUserById,
   ensureUserTable,
 };

@@ -27,12 +27,13 @@ function serializeTask(task) {
 async function listTasks(req, res, next) {
   try {
     const { userId, from, to } = req.query;
+    const ownerId = req.user?.id || userId;
 
     const db = await readDb();
     let tasks = db.tasks;
 
-    if (userId) {
-      tasks = tasks.filter((t) => t.userId === userId);
+    if (ownerId) {
+      tasks = tasks.filter((t) => t.userId === ownerId);
     }
 
     if (from) {
@@ -54,12 +55,14 @@ async function listTasks(req, res, next) {
 async function createTask(req, res, next) {
   try {
     const { userId, title, description = "", dueAt, dueDate } = req.body;
+    if (req.user && req.user.id !== userId) throw new HttpError(403, 'No puedes crear tareas para otra cuenta');
 
     if (!userId || !title || !(dueAt || dueDate)) {
       throw new HttpError(400, "userId, title y dueAt/dueDate son obligatorios");
     }
 
     const normalizedDueAt = normalizeDueAt(dueAt || dueDate);
+    if (typeof title !== 'string' || !title.trim()) throw new HttpError(400, 'El título no puede estar vacío');
     if (!normalizedDueAt) {
       throw new HttpError(400, "Formato de fecha invalido");
     }
@@ -90,7 +93,7 @@ async function updateTask(req, res, next) {
     const { id } = req.params;
     const db = await readDb();
 
-    const idx = db.tasks.findIndex((t) => t.id === id);
+    const idx = db.tasks.findIndex((t) => t.id === id && (!req.user || t.userId === req.user.id));
     if (idx === -1) {
       throw new HttpError(404, "Tarea no encontrada");
     }
@@ -98,6 +101,9 @@ async function updateTask(req, res, next) {
     const current = db.tasks[idx];
     const dueAt = req.body.dueAt || req.body.dueDate;
     const normalizedDueAt = dueAt ? normalizeDueAt(dueAt) : current.dueAt;
+    if (!normalizedDueAt) throw new HttpError(400, 'Formato de fecha inválido');
+    if (req.body.title !== undefined && (typeof req.body.title !== 'string' || !req.body.title.trim())) throw new HttpError(400, 'El título no puede estar vacío');
+    if (req.body.completed !== undefined && typeof req.body.completed !== 'boolean') throw new HttpError(400, 'El estado debe ser verdadero o falso');
 
     db.tasks[idx] = {
       ...current,
@@ -121,7 +127,7 @@ async function deleteTask(req, res, next) {
   try {
     const { id } = req.params;
     const db = await readDb();
-    const idx = db.tasks.findIndex((t) => t.id === id);
+    const idx = db.tasks.findIndex((t) => t.id === id && (!req.user || t.userId === req.user.id));
 
     if (idx === -1) {
       throw new HttpError(404, "Tarea no encontrada");
@@ -140,7 +146,7 @@ async function getTaskReminders(req, res, next) {
   try {
     const { id } = req.params;
     const db = await readDb();
-    const task = db.tasks.find((t) => t.id === id);
+    const task = db.tasks.find((t) => t.id === id && (!req.user || t.userId === req.user.id));
 
     if (!task) {
       throw new HttpError(404, "Tarea no encontrada");

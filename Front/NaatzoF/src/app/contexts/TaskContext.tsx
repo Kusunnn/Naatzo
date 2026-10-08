@@ -1,6 +1,14 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { useAuth } from './AuthContext';
-import { apiRequest } from '../services/api';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useCallback,
+  useRef,
+} from "react";
+import { useAuth } from "./AuthContext";
+import { apiRequest } from "../services/api";
 
 export interface Task {
   id: string;
@@ -8,11 +16,12 @@ export interface Task {
   description: string;
   dueDate: Date;
   completed: boolean;
+  userId?: string;
 }
 
 interface TaskContextType {
   tasks: Task[];
-  addTask: (task: Omit<Task, 'id' | 'completed'>) => Promise<void>;
+  addTask: (task: Omit<Task, "id" | "completed">) => Promise<void>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   toggleTask: (id: string) => Promise<void>;
@@ -22,7 +31,13 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [owned, setOwned] = useState<{ userId: string; tasks: Task[] }>({
+    userId: "",
+    tasks: [],
+  });
+  const activeUser = useRef(user?.id);
+  activeUser.current = user?.id;
+  const tasks = owned.userId === user?.id ? owned.tasks : [];
 
   const mapApiTask = (task: {
     id: string;
@@ -31,33 +46,45 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     dueAt?: string;
     dueDate?: string;
     completed: boolean;
+    userId?: string;
   }): Task => ({
     id: task.id,
     title: task.title,
     description: task.description,
     dueDate: new Date(task.dueAt || task.dueDate || new Date().toISOString()),
     completed: task.completed,
+    userId: task.userId,
   });
 
   const loadTasks = useCallback(async () => {
     if (!user?.id) {
-      setTasks([]);
+      setOwned({ userId: "", tasks: [] });
       return;
     }
 
     try {
-      const payload = await apiRequest<{ tasks: Array<{
-        id: string;
-        title: string;
-        description: string;
-        dueAt?: string;
-        dueDate?: string;
-        completed: boolean;
-      }> }>(`/tasks?userId=${encodeURIComponent(user.id)}`);
+      const payload = await apiRequest<{
+        tasks: Array<{
+          id: string;
+          title: string;
+          description: string;
+          dueAt?: string;
+          dueDate?: string;
+          completed: boolean;
+          userId?: string;
+        }>;
+      }>(`/tasks?userId=${encodeURIComponent(user.id)}`);
 
-      setTasks(payload.tasks.map(mapApiTask));
+      if (activeUser.current === user.id)
+        setOwned({
+          userId: user.id,
+          tasks: payload.tasks
+            .filter((task) => task.userId === user.id)
+            .map(mapApiTask),
+        });
     } catch {
-      setTasks([]);
+      if (activeUser.current === user.id)
+        setOwned({ userId: user.id, tasks: [] });
     }
   }, [user?.id]);
 
@@ -65,13 +92,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     loadTasks();
   }, [loadTasks]);
 
-  const addTask = async (task: Omit<Task, 'id' | 'completed'>) => {
+  const addTask = async (task: Omit<Task, "id" | "completed">) => {
     if (!user?.id) {
       return;
     }
 
-    await apiRequest<{ task: unknown }>('/tasks', {
-      method: 'POST',
+    await apiRequest<{ task: unknown }>("/tasks", {
+      method: "POST",
       body: {
         userId: user.id,
         title: task.title,
@@ -85,7 +112,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
     await apiRequest<{ task: unknown }>(`/tasks/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: {
         title: updates.title,
         description: updates.description,
@@ -99,7 +126,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const deleteTask = async (id: string) => {
     await apiRequest<void>(`/tasks/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
 
     await loadTasks();
@@ -115,7 +142,9 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <TaskContext.Provider value={{ tasks, addTask, updateTask, deleteTask, toggleTask }}>
+    <TaskContext.Provider
+      value={{ tasks, addTask, updateTask, deleteTask, toggleTask }}
+    >
       {children}
     </TaskContext.Provider>
   );
@@ -124,7 +153,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 export function useTasks() {
   const context = useContext(TaskContext);
   if (context === undefined) {
-    throw new Error('useTasks must be used within a TaskProvider');
+    throw new Error("useTasks must be used within a TaskProvider");
   }
   return context;
 }

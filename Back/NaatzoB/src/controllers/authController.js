@@ -1,6 +1,7 @@
 const users = require("../repositories/userRepository");
 const { hashPassword, verifyPassword } = require("../utils/password");
 const { HttpError } = require("../utils/httpError");
+const { createSession } = require('../services/collaborationService');
 
 function sanitizeUser(user) {
   return {
@@ -31,7 +32,7 @@ async function register(req, res, next) {
       email: normalizedEmail,
     });
 
-    res.status(201).json({ user: sanitizeUser(user) });
+    res.status(201).json({ user: sanitizeUser(user), token: await createSession(user.id) });
   } catch (error) {
     next(error);
   }
@@ -49,7 +50,7 @@ async function login(req, res, next) {
       throw new HttpError(401, "Credenciales invalidas");
     }
 
-    res.json({ user: sanitizeUser(user) });
+    res.json({ user: sanitizeUser(user), token: await createSession(user.id) });
   } catch (error) {
     next(error);
   }

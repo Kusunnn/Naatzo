@@ -34,6 +34,7 @@ app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use('/api/collaboration', require('./routes/collaborationRoutes'));
 
 app.use(notFound);
 app.use(errorHandler);

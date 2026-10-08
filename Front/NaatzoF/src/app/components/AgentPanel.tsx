@@ -1,0 +1,497 @@
+﻿import { useEffect, useState } from "react";
+import {
+  Bot,
+  CheckCircle2,
+  LoaderCircle,
+  AlertCircle,
+  GitBranch,
+} from "lucide-react";
+import {
+  Project,
+  KanbanTask,
+  makeMember,
+  useProjects,
+} from "../contexts/ProjectContext";
+import {
+  AgentId,
+  AgentStep,
+  Run,
+  agentApi,
+  normalizeBoard,
+  streamRun,
+} from "../services/agents";
+
+const agents: { id: AgentId; title: string; description: string }[] = [
+  {
+    id: "analyst",
+    title: "Analista",
+    description: "Extrae objetivo, requisitos, stack y dudas de la minuta.",
+  },
+  {
+    id: "planner",
+    title: "Planificador",
+    description: "Propone tareas y distribuye la carga del equipo.",
+  },
+  {
+    id: "devops",
+    title: "DevOps",
+    description: "Prepara estructura, README, Docker y repositorio.",
+  },
+  {
+    id: "notifier",
+    title: "Notificador",
+    description: "Comunica acuerdos y entregas al equipo.",
+  },
+];
+const statuses: Record<string, string> = {
+  queued: "En cola",
+  analyzing: "Analizando",
+  planning: "Planificando",
+  awaiting_approval: "Plan pendiente de revisión",
+  provisioning: "Preparando entorno",
+  notifying: "Notificando",
+  completed: "Completado",
+  failed: "La ejecución falló",
+  cancelled: "Cancelado",
+};
+export function AgentPanel({ project }: { project: Project }) {
+  const { updateProject } = useProjects();
+  const [run, setRun] = useState<Run>();
+  const [steps, setSteps] = useState<AgentStep[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [environment, setEnvironment] =
+    useState<Awaited<ReturnType<typeof agentApi.environment>>>();
+  const [workload, setWorkload] =
+    useState<Awaited<ReturnType<typeof agentApi.board>>["workload"]>();
+  const [confirmed, setConfirmed] = useState(false);
+  const [remotePlan, setRemotePlan] = useState<KanbanTask[]>();
+  async function refresh() {
+    if (!project.runId) return;
+    const current = await agentApi.run(project.runId);
+    setRun(current);
+    setSteps(current.steps || []);
+    if (
+      project.remoteId &&
+      ["awaiting_approval", "completed"].includes(current.status)
+    ) {
+      const board = await agentApi.board(project.remoteId);
+      setWorkload(board.workload);
+      setRemotePlan(normalizeBoard(board, project.id));
+      // Only populate an empty local board; local edits remain the source of truth here.
+      if (!project.tasks.length) {
+        const remoteTasks = board.columns.flatMap((c) => c.tasks);
+        const members = [...project.members];
+        remoteTasks.forEach((t) => {
+          const assignee = t.assignee;
+          if (assignee && !members.some((m) => m.id === String(assignee.id))) {
+            const index = members.findIndex(
+              (m) => m.name.toLowerCase() === assignee.name.toLowerCase(),
+            );
+            if (index >= 0)
+              members[index] = { ...members[index], id: String(assignee.id) };
+            else
+              members.push({
+                ...makeMember(assignee.name, members.length),
+                id: String(assignee.id),
+              });
+          }
+        });
+        updateProject(project.id, {
+          tasks: normalizeBoard(board, project.id),
+          members,
+        });
+      }
+      if (current.status === "completed")
+        setEnvironment(await agentApi.environment(project.remoteId));
+    }
+  }
+  useEffect(() => {
+    setRun(undefined);
+    setSteps([]);
+    setEnvironment(undefined);
+    setWorkload(undefined);
+    setRemotePlan(undefined);
+    setError("");
+    setConfirmed(false);
+    if (!project.runId) return;
+    const controller = new AbortController();
+    agentApi
+      .run(project.runId, controller.signal)
+      .then((current) => {
+        setRun(current);
+        setSteps(current.steps || []);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) setError(err.message);
+      });
+    streamRun(
+      project.runId,
+      (event) => {
+        if (event.type === "step" && event.agent) {
+          const step = {
+            agent: event.agent,
+            status: event.status,
+            summary: event.summary,
+            error: event.error,
+          } as AgentStep;
+          setSteps((prev) => [
+            ...prev.filter((s) => s.agent !== step.agent),
+            step,
+          ]);
+          if (event.status === "started")
+            setRun({
+              status: (
+                {
+                  analyst: "analyzing",
+                  planner: "planning",
+                  devops: "provisioning",
+                  notifier: "notifying",
+                } as const
+              )[event.agent],
+            });
+          if (event.status === "failed")
+            setRun({ status: "failed", error: event.error });
+        }
+        if (
+          ["awaiting_approval", "completed", "failed", "cancelled"].includes(
+            event.type,
+          )
+        ) {
+          setRun({ status: event.type as Run["status"] });
+        }
+      },
+      controller.signal,
+    ).catch((err) => {
+      if (!controller.signal.aborted) setError(err.message);
+    });
+    return () => controller.abort();
+  }, [project.runId]);
+  useEffect(() => {
+    if (
+      !project.remoteId ||
+      !run ||
+      !["awaiting_approval", "completed"].includes(run.status)
+    )
+      return;
+    let disposed = false;
+    agentApi
+      .board(project.remoteId)
+      .then((board) => {
+        if (disposed) return;
+        setWorkload(board.workload);
+        setRemotePlan(normalizeBoard(board, project.id));
+        if (!project.tasks.length) {
+          const members = [...project.members];
+          board.columns
+            .flatMap((c) => c.tasks)
+            .forEach((t) => {
+              const assignee = t.assignee;
+              if (
+                assignee &&
+                !members.some((m) => m.id === String(assignee.id))
+              ) {
+                const index = members.findIndex(
+                  (m) => m.name.toLowerCase() === assignee.name.toLowerCase(),
+                );
+                if (index >= 0)
+                  members[index] = {
+                    ...members[index],
+                    id: String(assignee.id),
+                  };
+                else
+                  members.push({
+                    ...makeMember(assignee.name, members.length),
+                    id: String(assignee.id),
+                  });
+              }
+            });
+          updateProject(project.id, {
+            tasks: normalizeBoard(board, project.id),
+            members,
+          });
+        }
+      })
+      .catch((err) => {
+        if (!disposed) setError(err.message);
+      });
+    if (run.status === "completed")
+      agentApi
+        .environment(project.remoteId)
+        .then((data) => {
+          if (!disposed) setEnvironment(data);
+        })
+        .catch((err) => {
+          if (!disposed) setError(err.message);
+        });
+    return () => {
+      disposed = true;
+    };
+  }, [run?.status, project.remoteId]);
+  async function action(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function start() {
+    let remoteId = project.remoteId;
+    if (!remoteId) {
+      let teamId = project.teamId;
+      if (!teamId) {
+        const result = await agentApi.createTeam(project.title);
+        teamId = result.team.id;
+        updateProject(project.id, { teamId });
+      }
+      const synced = [...(project.syncedMemberIds || [])];
+      for (const member of project.members) {
+        if (synced.includes(member.id)) continue;
+        await agentApi.addMember(teamId, {
+          name: member.name,
+          role: member.role,
+          skills: member.skills.map((s) => s.trim()).filter(Boolean),
+          weeklyHours: member.weeklyHours,
+        });
+        synced.push(member.id);
+        updateProject(project.id, { syncedMemberIds: [...synced] });
+      }
+      const result = await agentApi.createProject({
+        name: project.title,
+        description: project.description,
+        inputText: project.description,
+        teamId,
+      });
+      remoteId = result.project.id;
+      updateProject(project.id, { remoteId });
+    }
+    if (project.document) {
+      const blob = await (await fetch(project.document.data)).blob();
+      const uploadName = project.document.name.replace(/\.md$/i, ".txt");
+      await agentApi.upload(
+        remoteId,
+        new File([blob], uploadName, {
+          type: uploadName.endsWith(".txt") ? "text/plain" : blob.type,
+        }),
+      );
+    }
+    const result = await agentApi.start(remoteId);
+    const runId = result.runId || result.id;
+    if (!runId) throw new Error("El backend no devolvió un runId válido.");
+    updateProject(project.id, { remoteId, runId });
+    setRun(result);
+  }
+  const active =
+    run && !["failed", "completed", "cancelled"].includes(run.status);
+  return (
+    <div className="team-detail-grid">
+      <section className="team-panel">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="flex items-center gap-2 !mb-0">
+            <Bot className="text-primary" /> Asistentes del proyecto
+          </h2>
+          <span className="team-pill">
+            {run ? statuses[run.status] || run.status : "Sin ejecutar"}
+          </span>
+        </div>
+        <p className="text-muted-foreground text-sm mb-6">
+          La minuta se envía al backend de Naatzo. Revisa el plan antes de
+          autorizar la creación del entorno y los avisos.
+        </p>
+        {agents.map((a) => {
+          const step = steps.find((s) => s.agent === a.id);
+          return (
+            <div key={a.id} className={`team-agent ${step?.status || ""}`}>
+              <div className="flex justify-between">
+                <b>{a.title}</b>
+                {step?.status === "done" ? (
+                  <CheckCircle2 size={18} className="text-primary" />
+                ) : step?.status === "started" ? (
+                  <LoaderCircle
+                    size={18}
+                    className="animate-spin text-primary"
+                  />
+                ) : step?.status === "failed" ? (
+                  <AlertCircle size={18} className="text-destructive" />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Pendiente
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {step?.summary || step?.error || a.description}
+              </p>
+            </div>
+          );
+        })}
+        {error && (
+          <p role="alert" className="team-error">
+            {error}
+          </p>
+        )}
+        {run?.error && <p className="team-error">{run.error}</p>}
+        <div className="flex gap-3 flex-wrap">
+          {!active && run?.status !== "completed" && (
+            <button
+              disabled={busy}
+              className="team-primary"
+              onClick={() => action(start)}
+            >
+              {busy ? "Conectando…" : "Ejecutar agentes"}
+            </button>
+          )}
+          {project.runId && (
+            <button
+              disabled={busy}
+              className="team-button"
+              onClick={() => action(refresh)}
+            >
+              Actualizar estado y plan
+            </button>
+          )}
+          {run?.status === "failed" && (
+            <button
+              disabled={busy}
+              className="team-button"
+              onClick={() =>
+                action(async () => {
+                  await agentApi.retry(
+                    project.runId!,
+                    steps.find((s) => s.status === "failed")?.agent ||
+                      "analyst",
+                  );
+                  await refresh();
+                })
+              }
+            >
+              Reintentar paso fallido
+            </button>
+          )}
+          {active && (
+            <button
+              disabled={busy}
+              className="team-button"
+              onClick={() =>
+                action(async () => {
+                  await agentApi.cancel(project.runId!);
+                  await refresh();
+                })
+              }
+            >
+              Cancelar ejecución
+            </button>
+          )}
+        </div>
+        {run?.status === "awaiting_approval" && (
+          <div className="mt-6 p-4 bg-secondary rounded-xl">
+            <h3 className="font-semibold">
+              Revisa el tablero y la carga del equipo
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              La aprobación usa el plan del servidor que aparece abajo. Los
+              cambios manuales del tablero se guardan solo en este navegador.
+              Aprobar permite crear el repositorio y enviar avisos.
+            </p>
+            {remotePlan ? (
+              <ul className="text-sm my-4 space-y-2">
+                {remotePlan.map((t) => (
+                  <li key={t.id} className="border-b border-border pb-2">
+                    {t.title}{" "}
+                    <span className="text-muted-foreground">
+                      · {t.estimatedTime} · {t.priority}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-3">
+                Actualiza para cargar el plan antes de aprobar.
+              </p>
+            )}
+            <label className="flex gap-2 text-sm my-4">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />{" "}
+              Revisé el plan y autorizo continuar.
+            </label>
+            <button
+              disabled={busy || !confirmed || !remotePlan}
+              className="team-primary"
+              onClick={() =>
+                action(async () => {
+                  await agentApi.approve(project.runId!);
+                  setConfirmed(false);
+                  await refresh();
+                })
+              }
+            >
+              Aprobar plan y continuar
+            </button>
+          </div>
+        )}
+      </section>
+      <aside className="space-y-5">
+        <section className="team-panel">
+          <h2>Conexión con agentes</h2>
+          <p className="text-sm text-muted-foreground">
+            Interfaz preparada para la API del PDF. Los agentes necesitan el
+            nuevo backend disponible. Las cuentas actuales se mantienen.
+          </p>
+          <p className="text-xs text-muted-foreground mt-4">
+            Los modelos, GitHub y el canal de avisos se configuran en el
+            servidor.
+          </p>
+        </section>
+        {workload && (
+          <section className="team-panel">
+            <h2>Carga propuesta</h2>
+            {workload.map((m) => (
+              <div key={m.memberId} className="mb-4">
+                <div className="flex justify-between text-sm">
+                  <span>{m.name}</span>
+                  <b className={m.percent > 100 ? "text-destructive" : ""}>
+                    {m.percent}%
+                  </b>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {m.assignedHours} / {m.capacityHours} horas
+                </p>
+              </div>
+            ))}
+          </section>
+        )}
+        {environment && (
+          <section className="team-panel">
+            <h2 className="flex gap-2">
+              <GitBranch size={18} /> Entorno generado
+            </h2>
+            {environment.repoUrl && /^https:\/\//.test(environment.repoUrl) && (
+              <a
+                href={environment.repoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary text-sm break-all"
+              >
+                Abrir repositorio
+              </a>
+            )}
+            <ul className="text-sm text-muted-foreground mt-4">
+              {environment.files?.map((f) => (
+                <li key={typeof f === "string" ? f : f.path}>
+                  {typeof f === "string" ? f : f.path}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </aside>
+    </div>
+  );
+}

@@ -1,14 +1,25 @@
-import { Outlet, useLocation, Navigate } from 'react-router';
-import { useAuth } from '../contexts/AuthContext';
-import { Navbar } from './Navbar';
-import { FloatingElephant } from './FloatingElephant';
+import { Outlet, useLocation, Navigate } from "react-router";
+import { useAuth } from "../contexts/AuthContext";
+import { Navbar } from "./Navbar";
+import { FloatingElephant } from "./FloatingElephant";
+import { AppModeProvider, useAppMode } from "../contexts/AppModeContext";
 
 export function Layout() {
+  return (
+    <AppModeProvider>
+      <AppLayout />
+    </AppModeProvider>
+  );
+}
+
+function AppLayout() {
   const { user, isAuthReady } = useAuth();
   const location = useLocation();
 
-  const isAuthPage = location.pathname === '/' || location.pathname === '/register';
-  const showFloatingElephant = !isAuthPage && location.pathname !== '/chatbot';
+  const isAuthPage =
+    location.pathname === "/" || location.pathname === "/register" || location.pathname.startsWith('/invite/');
+  const { mode } = useAppMode();
+  const showFloatingElephant = !isAuthPage && location.pathname !== "/chatbot";
 
   if (!isAuthReady) {
     return (
@@ -31,7 +42,9 @@ export function Layout() {
   }
 
   return (
-    <div className={`min-h-screen bg-background ${location.pathname === '/chatbot' ? 'mx-auto w-full max-w-[1340px]' : ''}`}>
+    <div
+      className={`min-h-screen bg-background${mode === "team" ? " team-theme" : ""}`}
+    >
       <Navbar />
       <main>
         <Outlet />

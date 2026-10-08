@@ -8,37 +8,40 @@
   --card-foreground: #1a1a1a;
   --popover: #ffffff;
   --popover-foreground: #1a1a1a;
-  --primary: #4A90E2;
+  --primary: #4a90e2;
+  --mascot-body: #7fb3e8;
+  --mascot-detail: #4a90e2;
+  --mascot-highlight: #b3d7f5;
   --primary-foreground: #ffffff;
   --secondary: #f5f9ff;
   --secondary-foreground: #1a1a1a;
   --muted: #e8f2fe;
   --muted-foreground: #6b7280;
-  --accent: #7FB3E8;
+  --accent: #7fb3e8;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: rgba(0, 0, 0, 0.08);
   --input: transparent;
   --input-background: #f9fafb;
-  --switch-background: #4A90E2;
+  --switch-background: #4a90e2;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #4A90E2;
-  --chart-1: #4A90E2;
-  --chart-2: #7FB3E8;
-  --chart-3: #B3D7F5;
-  --chart-4: #2E6DB5;
+  --ring: #4a90e2;
+  --chart-1: #4a90e2;
+  --chart-2: #7fb3e8;
+  --chart-3: #b3d7f5;
+  --chart-4: #2e6db5;
   --chart-5: #1a4d7a;
   --radius: 1rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #4A90E2;
+  --sidebar-primary: #4a90e2;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f5f9ff;
   --sidebar-accent-foreground: #1a1a1a;
   --sidebar-border: rgba(0, 0, 0, 0.08);
-  --sidebar-ring: #4A90E2;
+  --sidebar-ring: #4a90e2;
 }
 
 .dark {
@@ -77,6 +80,43 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: #3f7fc5;
+}
+
+/* Team routes scope their palette to the layout, including navigation and dialogs. */
+.team-theme {
+  --primary: #a8cc45;
+  --primary-foreground: #26350e;
+  --primary-ink: #526f1b;
+  --accent: #c4df77;
+  --accent-foreground: #26350e;
+  --secondary: #f7faef;
+  --muted: #eef5d9;
+  --ring: #91b732;
+  --switch-background: #a8cc45;
+  --input-background: #fafcf4;
+  --mascot-body: #c4df77;
+  --mascot-detail: #91b732;
+  --mascot-highlight: #e5f2b7;
+}
+
+.dark .team-theme {
+  --primary: #b59aeb;
+  --primary-foreground: #281d40;
+  --primary-ink: #d0baf5;
+  --accent: #8e71c6;
+  --accent-foreground: #211630;
+  --secondary: #292335;
+  --muted: #382c48;
+  --ring: #b59aeb;
+  --switch-background: #b59aeb;
+  --input-background: #211b2c;
+  --mascot-body: #c6acef;
+  --mascot-detail: #9973cc;
+  --mascot-highlight: #e4d5fa;
+}
+
+.team-theme .text-primary {
+  color: var(--primary-ink);
 }
 
 @theme inline {

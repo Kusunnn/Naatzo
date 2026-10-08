@@ -41,7 +41,8 @@ async function buildTaskNotifications(tasks) {
       continue;
     }
 
-    const books = await searchBooks({ query: keywordFromTask(task.title), limit: 1 });
+    // A library outage must not hide deadline notifications.
+    const books = await searchBooks({ query: keywordFromTask(task.title), limit: 1 }).catch(() => []);
     result.push({
       taskId: task.id,
       taskTitle: task.title,

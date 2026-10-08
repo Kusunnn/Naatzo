@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const raw = localStorage.getItem('naatzo-user') ?? localStorage.getItem(legacyKey);
     if (raw) {
       try {
-        setUser(JSON.parse(raw) as User);
+        if (sessionStorage.getItem('naatzo-token')) setUser(JSON.parse(raw) as User);
         localStorage.setItem('naatzo-user', raw);
       } catch {
         localStorage.removeItem('naatzo-user');
@@ -43,11 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const payload = await apiRequest<{ user: User }>('/auth/login', {
+      const payload = await apiRequest<{ user: User; token: string }>('/auth/login', {
         method: 'POST',
         body: { email, password },
       });
 
+      sessionStorage.setItem('naatzo-token', payload.token);
       setUser(payload.user);
       localStorage.setItem('naatzo-user', JSON.stringify(payload.user));
       return true;
@@ -62,11 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const payload = await apiRequest<{ user: User }>('/auth/register', {
+      const payload = await apiRequest<{ user: User; token: string }>('/auth/register', {
         method: 'POST',
         body: { name, email, password },
       });
 
+      sessionStorage.setItem('naatzo-token', payload.token);
       setUser(payload.user);
       localStorage.setItem('naatzo-user', JSON.stringify(payload.user));
       return true;
@@ -76,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    sessionStorage.removeItem('naatzo-token');
     setUser(null);
     localStorage.removeItem('naatzo-user');
   };

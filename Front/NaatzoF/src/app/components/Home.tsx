@@ -1,15 +1,18 @@
 import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
-import { useTasks } from "../contexts/TaskContext";
+import { useMyTasks, myTasksProgress } from "../contexts/useMyTasks";
+import { acceptanceProgress } from "../services/projectProgress";
+import { useAppMode } from "../contexts/AppModeContext";
+import { useProjects } from "../contexts/ProjectContext";
 import {
   Calendar,
   BookOpen,
   MessageSquare,
   Library as LibraryIcon,
-  CheckCircle2,
-  Clock,
-  TrendingUp,
+  Users,
+  Columns3,
 } from "lucide-react";
+import { MetricCard } from "./MetricCard";
 import { ElephantMascot } from "./ElephantMascot";
 import { motion } from "motion/react";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -17,7 +20,20 @@ import { es } from "date-fns/locale";
 
 export function Home() {
   const { user } = useAuth();
-  const { tasks } = useTasks();
+  const { tasks: individualTasks } = useMyTasks();
+  const { mode } = useAppMode();
+  const { projects } = useProjects();
+  const tasks =
+    mode === "team"
+      ? projects.flatMap((p) =>
+          p.tasks.map((t) => ({
+            ...t,
+            completed: t.column === "done",
+            dueDate: t.dueDate || new Date(NaN),
+            acceptanceUnits: acceptanceProgress(t),
+          })),
+        )
+      : individualTasks;
   const navigate = useNavigate();
 
   const incompleteTasks = tasks.filter((t) => !t.completed);
@@ -25,36 +41,68 @@ export function Home() {
   const todayTasks = incompleteTasks.filter((t) => isToday(t.dueDate));
   const tomorrowTasks = incompleteTasks.filter((t) => isTomorrow(t.dueDate));
 
-  const quickActions = [
-    {
-      title: "Calendario",
-      description: "Organiza tus tareas",
-      icon: Calendar,
-      color: "from-primary to-accent",
-      path: "/calendar",
-    },
-    {
-      title: "Recomendaciones",
-      description: "Recursos personalizados",
-      icon: BookOpen,
-      color: "from-accent to-primary",
-      path: "/recommendations",
-    },
-    {
-      title: "Asistente",
-      description: "Habla con Naatzo",
-      icon: MessageSquare,
-      color: "from-primary to-accent",
-      path: "/chatbot",
-    },
-    {
-      title: "Biblioteca",
-      description: "Explora libros",
-      icon: LibraryIcon,
-      color: "from-accent to-primary",
-      path: "/library",
-    },
-  ];
+  const quickActions =
+    mode === "team"
+      ? [
+          {
+            title: "Proyectos",
+            description: "Detalles, documentos e integrantes",
+            icon: Users,
+            color: "from-primary to-accent",
+            path: "/projects",
+          },
+          {
+            title: "Tablero",
+            description: "Asigna y organiza las tareas",
+            icon: Columns3,
+            color: "from-primary to-accent",
+            path: "/board",
+          },
+          {
+            title: "Calendario de actividades",
+            description: "Entregas y responsables",
+            icon: Calendar,
+            color: "from-primary to-accent",
+            path: "/team-calendar",
+          },
+          {
+            title: "Asistente",
+            description: "Habla con Naatzo",
+            icon: MessageSquare,
+            color: "from-primary to-accent",
+            path: "/chatbot",
+          },
+        ]
+      : [
+          {
+            title: "Calendario",
+            description: "Organiza tus tareas",
+            icon: Calendar,
+            color: "from-primary to-accent",
+            path: "/calendar",
+          },
+          {
+            title: "Recomendaciones",
+            description: "Recursos personalizados",
+            icon: BookOpen,
+            color: "from-accent to-primary",
+            path: "/recommendations",
+          },
+          {
+            title: "Asistente",
+            description: "Habla con Naatzo",
+            icon: MessageSquare,
+            color: "from-primary to-accent",
+            path: "/chatbot",
+          },
+          {
+            title: "Biblioteca",
+            description: "Explora libros",
+            icon: LibraryIcon,
+            color: "from-accent to-primary",
+            path: "/library",
+          },
+        ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary via-background to-secondary">
@@ -70,6 +118,7 @@ export function Home() {
                 ¡Hola, {user?.name}!
               </h1>
               <p className="text-muted-foreground text-base md:text-lg">
+                {mode === "team" ? "Espacio de equipo · " : ""}
                 {format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}
               </p>
             </div>
@@ -88,66 +137,22 @@ export function Home() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-card rounded-2xl shadow-lg border border-border p-6 hover:shadow-xl transition-shadow"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Clock className="w-7 h-7 text-primary" />
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Tareas pendientes</p>
-                <h2 className="text-3xl font-bold text-foreground">
-                  {incompleteTasks.length}
-                </h2>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-card rounded-2xl shadow-lg border border-border p-6 hover:shadow-xl transition-shadow"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-green-500/10 rounded-xl flex items-center justify-center">
-                <CheckCircle2 className="w-7 h-7 text-green-500" />
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Completadas</p>
-                <h2 className="text-3xl font-bold text-foreground">
-                  {completedTasks.length}
-                </h2>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-card rounded-2xl shadow-lg border border-border p-6 hover:shadow-xl transition-shadow"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-accent/10 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-7 h-7 text-accent" />
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Progreso</p>
-                <h2 className="text-3xl font-bold text-foreground">
-                  {tasks.length > 0
-                    ? Math.round((completedTasks.length / tasks.length) * 100)
-                    : 0}
-                  %
-                </h2>
-              </div>
-            </div>
-          </motion.div>
+        <div className="metric-grid mb-12">
+          <MetricCard
+            label="Tareas pendientes"
+            value={incompleteTasks.length}
+            icon="pending"
+          />
+          <MetricCard
+            label="Completadas"
+            value={completedTasks.length}
+            icon="completed"
+          />
+          <MetricCard
+            label="Progreso"
+            value={`${myTasksProgress(tasks)}%`}
+            icon="progress"
+          />
         </div>
 
         {(todayTasks.length > 0 || tomorrowTasks.length > 0) && (
@@ -155,7 +160,7 @@ export function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-card rounded-2xl shadow-lg border border-border p-6 mb-12"
+            className="bg-card rounded-2xl border border-border p-6 mb-12"
           >
             <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
               <Calendar className="w-6 h-6 text-primary" />
@@ -214,7 +219,7 @@ export function Home() {
           <h2 className="text-2xl font-bold text-foreground mb-6">
             Acceso rápido
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {quickActions.map((action, index) => (
               <motion.button
                 key={action.path}
@@ -222,15 +227,13 @@ export function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 + index * 0.1 }}
                 onClick={() => navigate(action.path)}
-                className="group relative bg-card rounded-2xl shadow-lg border border-border p-6 hover:shadow-xl transition-all overflow-hidden"
+                className="group relative bg-card rounded-2xl border border-border p-6 hover:border-primary/30 transition-all overflow-hidden"
               >
                 <div
                   className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-5 transition-opacity`}
                 />
-                <div
-                  className={`w-14 h-14 bg-gradient-to-br ${action.color} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}
-                >
-                  <action.icon className="w-7 h-7 text-white" />
+                <div className="metric-symbol mb-4">
+                  <action.icon className="w-6 h-6" strokeWidth={1.5} />
                 </div>
                 <h3 className="text-lg font-bold text-foreground mb-2">
                   {action.title}

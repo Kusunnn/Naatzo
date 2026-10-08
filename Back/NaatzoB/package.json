@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "chatbot": "node ../../NaatzoE/src/index.js",
     "start:all": "node scripts/start-all.js",
-    "test": "echo \"No tests configured\""
+    "test": "node --test test/*.test.js && node scripts/check-email-templates.js && node scripts/check-email-encoding.js"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +18,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "nodemailer": "^10.0.16",
     "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
   }
 }

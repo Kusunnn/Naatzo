@@ -1,19 +1,20 @@
 const API_BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) || "http://localhost:4000/api";
 
-interface RequestOptions extends RequestInit {
+interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set('Content-Type', 'application/json');
+  const token = sessionStorage.getItem('naatzo-token');
+  if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(headers || {}),
-    },
+    headers: requestHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
