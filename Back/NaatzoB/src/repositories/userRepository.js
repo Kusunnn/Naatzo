@@ -112,6 +112,7 @@ async function findUserById(id) {
 }
 
 module.exports = {
+  findUserById,
   createUser,
   findUserByEmail,
   findUserById,

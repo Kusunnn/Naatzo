@@ -8,20 +8,34 @@
     "start": "node src/server.js",
     "chatbot": "node ../../NaatzoE/src/index.js",
     "start:all": "node scripts/start-all.js",
-    "test": "node --test test/*.test.js && node scripts/check-email-templates.js && node scripts/check-email-encoding.js"
+    "test": "node --test test/*.test.js && node scripts/check-email-templates.js && node scripts/check-email-encoding.js",
+    "migrate:team": "node src/modules/team/db/migrate.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@octokit/rest": "^22.0.1",
+    "archiver": "^8.0.0",
+    "axios": "^1.20.0",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "js-yaml": "^5.4.3",
+    "jsonwebtoken": "^9.0.3",
+    "mammoth": "^1.13.0",
+    "multer": "^2.4.0",
+    "node-cron": "^4.6.0",
     "nodemailer": "^10.0.16",
-    "pg": "^8.20.0"
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.20.0",
+    "zod": "^4.6.5"
   },
-  "devDependencies": {
-    "pg-mem": "^3.0.14"
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

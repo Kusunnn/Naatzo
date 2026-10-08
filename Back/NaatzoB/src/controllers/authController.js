@@ -1,7 +1,7 @@
 const users = require("../repositories/userRepository");
 const { hashPassword, verifyPassword } = require("../utils/password");
 const { HttpError } = require("../utils/httpError");
-const { createSession } = require('../services/collaborationService');
+const { signToken } = require('../modules/team/middleware/auth');
 
 function sanitizeUser(user) {
   return {
@@ -32,7 +32,7 @@ async function register(req, res, next) {
       email: normalizedEmail,
     });
 
-    res.status(201).json({ user: sanitizeUser(user), token: await createSession(user.id) });
+    res.status(201).json({ ok: true, token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
     next(error);
   }
@@ -50,13 +50,22 @@ async function login(req, res, next) {
       throw new HttpError(401, "Credenciales invalidas");
     }
 
-    res.json({ user: sanitizeUser(user), token: await createSession(user.id) });
+    res.json({ ok: true, token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
     next(error);
   }
 }
 
+async function me(req, res, next) {
+  try {
+    const user = await users.findUserById(req.user.id);
+    if (!user) throw new HttpError(401, 'La sesión ya no es válida');
+    res.json({ user: sanitizeUser(user) });
+  } catch (error) { next(error); }
+}
+
 module.exports = {
   register,
   login,
+  me,
 };

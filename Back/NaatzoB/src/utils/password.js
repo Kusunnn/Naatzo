@@ -12,11 +12,15 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
 }
 
 function verifyPassword(password, storedHash) {
+  if (typeof storedHash === 'string' && /^\$2[aby]\$/.test(storedHash)) {
+    return require('bcryptjs').compareSync(password, storedHash);
+  }
   if (!storedHash || typeof storedHash !== "string" || !storedHash.includes(":")) {
     return false;
   }
 
   const [salt, originalHash] = storedHash.split(":");
+  if (!salt || !/^[a-f0-9]{128}$/i.test(originalHash || '')) return false;
   const candidate = hashPassword(password, salt).split(":")[1];
   return crypto.timingSafeEqual(Buffer.from(candidate, "hex"), Buffer.from(originalHash, "hex"));
 }
