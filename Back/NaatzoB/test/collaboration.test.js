@@ -35,9 +35,18 @@ test('invitation permissions, acceptance, revocation and conflicting saves', asy
     return {status:response.status,data:response.status===204?null:await response.json()};
   }
   assert.equal((await request('/status',null)).status,401);
-  const created=await request('/projects','owner','POST',{title:'Equipo',members:[],tasks:[]});
+  tokens.jwt=require('../src/modules/team/middleware/auth').signToken(owner);
+  assert.equal((await request('/status','jwt')).status,200);
+  const payload={id:'00000000-0000-4000-8000-000000000003',title:'Equipo',members:[],tasks:[],document:{name:'minuta.txt',data:'data:text/plain;base64,'+Buffer.from('Descripción del equipo y sus tareas.').toString('base64')}};
+  const created=await request('/projects','owner','POST',payload);
   assert.equal(created.status,201);
   const project=created.data.project;
+  assert.deepEqual(project.document,payload.document);
+  const retried=await request('/projects','owner','POST',payload);
+  assert.equal(retried.status,200);
+  assert.equal(retried.data.project.id,project.id);
+  assert.equal((await request('/projects','member','POST',payload)).status,404);
+  assert.equal((await request('/projects','owner','POST',{...payload,id:undefined,document:{name:'x.exe',data:payload.document.data}})).status,400);
   assert.equal((await request(`/projects/${project.id}`,'member')).status,404);
   const invitation=await request(`/projects/${project.id}/invitations`,'owner','POST',{email:member.email});
   assert.equal(invitation.status,201);assert.equal(invitation.data.delivery.sent,false);

@@ -21,7 +21,7 @@ const schema = z.object({
   // Servidor
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-  CORS_ORIGINS: z.string().default("http://localhost:5173"),
+  CORS_ORIGINS: z.string().default("http://localhost:5173,http://127.0.0.1:5173"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET debe tener al menos 16 caracteres"),
   JWT_EXPIRES_IN: z.string().default("7d"),
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
@@ -75,6 +75,8 @@ raw.DATABASE_URL = mainEnv.databaseUrl;
 raw.DB_SCHEMA = process.env.TEAM_DB_SCHEMA || 'naatzo_team';
 raw.API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://localhost:${mainEnv.port}`;
 raw.JWT_SECRET = process.env.TEAM_JWT_SECRET || process.env.JWT_SECRET;
+raw.SMTP_PASS = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+raw.SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM;
 if (!raw.JWT_SECRET && mainEnv.nodeEnv !== 'production') {
   raw.JWT_SECRET = crypto.randomBytes(32).toString('hex');
   console.warn('[team] JWT temporal de desarrollo: configura TEAM_JWT_SECRET para conservar sesiones al reiniciar.');

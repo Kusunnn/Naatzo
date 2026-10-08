@@ -21,6 +21,7 @@ import {
 } from "../contexts/ProjectContext";
 import { AgentPanel } from "./AgentPanel";
 import { ProjectInvitations } from './ProjectInvitations';
+import { ProjectSaveStatus } from './ProjectSaveStatus';
 import { AcceptanceChecklist } from "./AcceptanceChecklist";
 import { useAuth } from "../contexts/AuthContext";
 import { linkMember, myMemberId } from "../services/projectProgress";
@@ -135,6 +136,7 @@ export function ProjectDetail() {
             <CalendarDays size={17} /> Entregas
           </Link>
         </header>
+        <ProjectSaveStatus project={project} />
         <div className="flex gap-4 items-center">
           <div className="flex -space-x-2">
             {project.members.map((m) => (
@@ -373,7 +375,7 @@ export function ProjectDetail() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               Arrastra las tarjetas entre columnas o usa el selector de estado.
-              El tablero se guarda en este navegador.
+              El tablero se guarda automáticamente en el proyecto compartido.
             </p>
           </>
         )}

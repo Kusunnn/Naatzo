@@ -19,9 +19,17 @@ router.get('/projects', asyncRoute(async (req,res) => {
   res.json({ projects: result.rows.map(service.view) });
 }));
 router.post('/projects', asyncRoute(async (req,res) => {
-  const id = crypto.randomUUID(); const snapshot = service.cleanSnapshot(req.body,req.user);
-  const result = await db.query('INSERT INTO naatzo_shared_projects(id,owner_id,snapshot) VALUES($1,$2,$3) RETURNING *',[id,req.user.id,snapshot]);
-  res.status(201).json({ project: service.view(result.rows[0]) });
+  // A client-generated UUID makes retries safe after a lost network response.
+  const id = typeof req.body.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.body.id) ? req.body.id : crypto.randomUUID();
+  const snapshot = service.cleanSnapshot(req.body,req.user);
+  const existing = await db.query('SELECT * FROM naatzo_shared_projects WHERE id=$1',[id]);
+  if(existing.rows[0]) {
+    const row=await service.readProject(id,req.user,true);
+    return res.status(200).json({project:service.view(row)});
+  }
+  const result = await db.query('INSERT INTO naatzo_shared_projects(id,owner_id,snapshot) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING RETURNING *',[id,req.user.id,snapshot]);
+  const row = result.rows[0] || await service.readProject(id,req.user,true);
+  res.status(result.rows.length ? 201 : 200).json({ project: service.view(row) });
 }));
 router.get('/projects/:id', asyncRoute(async (req,res) => res.json({ project: service.view(await service.readProject(req.params.id,req.user)) })));
 router.patch('/projects/:id', asyncRoute(async (req,res) => {

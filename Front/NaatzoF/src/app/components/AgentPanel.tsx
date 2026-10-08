@@ -60,12 +60,30 @@ export function AgentPanel({ project }: { project: Project }) {
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [llmMode, setLlmMode] = useState<string>();
+  useEffect(() => {
+    let active=true;
+    agentApi.integrations().then(data=>{if(active)setLlmMode(data.integrations.llm.mode);}).catch(()=>{if(active)setLlmMode('unavailable');});
+    return ()=>{active=false;};
+  }, []);
   const [environment, setEnvironment] =
     useState<Awaited<ReturnType<typeof agentApi.environment>>>();
   const [workload, setWorkload] =
     useState<Awaited<ReturnType<typeof agentApi.board>>["workload"]>();
   const [confirmed, setConfirmed] = useState(false);
   const [remotePlan, setRemotePlan] = useState<KanbanTask[]>();
+  function showPlan(board: Awaited<ReturnType<typeof agentApi.board>>) {
+    const members=[...project.members];
+    const columns=board.columns.map(column=>({...column,tasks:column.tasks.map(task=>{
+      if(!task.assignee)return task;
+      let member=members.find(m=>m.id===task.assignee!.id || m.name.trim().toLowerCase()===task.assignee!.name.trim().toLowerCase());
+      if(!member){member={...makeMember(task.assignee.name,members.length),id:task.assignee.id};members.push(member);}
+      return {...task,assigneeId:member.id};
+    })}));
+    const tasks=normalizeBoard({...board,columns},project.id);
+    setWorkload(board.workload);setRemotePlan(tasks);
+    if(!project.tasks.length)updateProject(project.id,{tasks,members});
+  }
   async function refresh() {
     if (!project.runId) return;
     const current = await agentApi.run(project.runId);
@@ -76,32 +94,7 @@ export function AgentPanel({ project }: { project: Project }) {
       ["awaiting_approval", "completed"].includes(current.status)
     ) {
       const board = await agentApi.board(project.remoteId);
-      setWorkload(board.workload);
-      setRemotePlan(normalizeBoard(board, project.id));
-      // Only populate an empty local board; local edits remain the source of truth here.
-      if (!project.tasks.length) {
-        const remoteTasks = board.columns.flatMap((c) => c.tasks);
-        const members = [...project.members];
-        remoteTasks.forEach((t) => {
-          const assignee = t.assignee;
-          if (assignee && !members.some((m) => m.id === String(assignee.id))) {
-            const index = members.findIndex(
-              (m) => m.name.toLowerCase() === assignee.name.toLowerCase(),
-            );
-            if (index >= 0)
-              members[index] = { ...members[index], id: String(assignee.id) };
-            else
-              members.push({
-                ...makeMember(assignee.name, members.length),
-                id: String(assignee.id),
-              });
-          }
-        });
-        updateProject(project.id, {
-          tasks: normalizeBoard(board, project.id),
-          members,
-        });
-      }
+      showPlan(board);
       if (current.status === "completed")
         setEnvironment(await agentApi.environment(project.remoteId));
     }
@@ -179,38 +172,7 @@ export function AgentPanel({ project }: { project: Project }) {
       .board(project.remoteId)
       .then((board) => {
         if (disposed) return;
-        setWorkload(board.workload);
-        setRemotePlan(normalizeBoard(board, project.id));
-        if (!project.tasks.length) {
-          const members = [...project.members];
-          board.columns
-            .flatMap((c) => c.tasks)
-            .forEach((t) => {
-              const assignee = t.assignee;
-              if (
-                assignee &&
-                !members.some((m) => m.id === String(assignee.id))
-              ) {
-                const index = members.findIndex(
-                  (m) => m.name.toLowerCase() === assignee.name.toLowerCase(),
-                );
-                if (index >= 0)
-                  members[index] = {
-                    ...members[index],
-                    id: String(assignee.id),
-                  };
-                else
-                  members.push({
-                    ...makeMember(assignee.name, members.length),
-                    id: String(assignee.id),
-                  });
-              }
-            });
-          updateProject(project.id, {
-            tasks: normalizeBoard(board, project.id),
-            members,
-          });
-        }
+        showPlan(board);
       })
       .catch((err) => {
         if (!disposed) setError(err.message);
@@ -241,6 +203,13 @@ export function AgentPanel({ project }: { project: Project }) {
   }
   async function start() {
     let remoteId = project.remoteId;
+    let file: File | undefined;
+    if(project.document) {
+      const blob=await (await fetch(project.document.data)).blob();
+      const name=project.document.name.replace(/\.md$/i,'.txt');
+      file=new File([blob],name,{type:name.endsWith('.txt')?'text/plain':blob.type});
+    }
+    const existingRemote=Boolean(remoteId);
     if (!remoteId) {
       let teamId = project.teamId;
       if (!teamId) {
@@ -265,20 +234,12 @@ export function AgentPanel({ project }: { project: Project }) {
         description: project.description,
         inputText: project.description,
         teamId,
+        file,
       });
       remoteId = result.project.id;
       updateProject(project.id, { remoteId });
     }
-    if (project.document) {
-      const blob = await (await fetch(project.document.data)).blob();
-      const uploadName = project.document.name.replace(/\.md$/i, ".txt");
-      await agentApi.upload(
-        remoteId,
-        new File([blob], uploadName, {
-          type: uploadName.endsWith(".txt") ? "text/plain" : blob.type,
-        }),
-      );
-    }
+    if (existingRemote && file) await agentApi.upload(remoteId, file);
     const result = await agentApi.start(remoteId);
     const runId = result.runId || result.id;
     if (!runId) throw new Error("El backend no devolvió un runId válido.");
@@ -302,6 +263,8 @@ export function AgentPanel({ project }: { project: Project }) {
           La minuta se envía al backend de Naatzo. Revisa el plan antes de
           autorizar la creación del entorno y los avisos.
         </p>
+        {llmMode === 'mock' && <p role="status" className="text-sm p-3 mb-4 bg-secondary rounded-xl">Modo de demostración: los agentes generan ejemplos. Falta configurar la clave de IA en el servidor para analizar tu proyecto con el modelo real.</p>}
+        {llmMode === 'unavailable' && <p role="status" className="team-error">No se pudo comprobar la conexión con los agentes.</p>}
         {agents.map((a) => {
           const step = steps.find((s) => s.agent === a.id);
           return (
@@ -394,7 +357,7 @@ export function AgentPanel({ project }: { project: Project }) {
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
               La aprobación usa el plan del servidor que aparece abajo. Los
-              cambios manuales del tablero se guardan solo en este navegador.
+              cambios manuales del tablero se guardan en el proyecto compartido.
               Aprobar permite crear el repositorio y enviar avisos.
             </p>
             {remotePlan ? (
@@ -441,8 +404,8 @@ export function AgentPanel({ project }: { project: Project }) {
         <section className="team-panel">
           <h2>Conexión con agentes</h2>
           <p className="text-sm text-muted-foreground">
-            Interfaz preparada para la API del PDF. Los agentes necesitan el
-            nuevo backend disponible. Las cuentas actuales se mantienen.
+            Los asistentes usan el backend de Naatzo y tu sesión actual.
+            El plan generado se importa al tablero del proyecto.
           </p>
           <p className="text-xs text-muted-foreground mt-4">
             Los modelos, GitHub y el canal de avisos se configuran en el

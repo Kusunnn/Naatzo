@@ -20,6 +20,16 @@ async function requireSession(req, res, next) {
   try {
     await ensureTables(); const token = req.headers.authorization?.replace(/^Bearer /, '');
     if (!token) throw new HttpError(401, 'Inicia sesión de nuevo para usar invitaciones.');
+    if(token.split('.').length===3) {
+      const {requireAuth}=require('../modules/team/middleware/auth');
+      return requireAuth(req,res,async()=>{
+        try {
+          const result=await db.query('SELECT id,name,email FROM naatzo_users WHERE id::text=$1',[req.user.id]);
+          if(!result.rows[0])throw new HttpError(401,'La cuenta ya no está disponible.');
+          req.user=result.rows[0];next();
+        }catch(error){next(error);}
+      });
+    }
     const result = await db.query('SELECT u.id,u.name,u.email FROM naatzo_sessions s JOIN naatzo_users u ON u.id::text=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()', [hash(token)]);
     if (!result.rows[0]) throw new HttpError(401, 'La sesión expiró. Inicia sesión de nuevo.');
     req.user = result.rows[0]; next();
@@ -57,10 +67,25 @@ function cleanSnapshot(input, user, current) {
     const trusted = current?.snapshot.members.find(existing => existing.id === member.id);
     return { ...member, userId: trusted?.userId || (member.userId === user.id ? user.id : undefined), email: trusted?.email || (member.userId === user.id ? user.email : undefined) };
   }) };
+  if(input.document !== undefined) {
+    const document=input.document;
+    if(!document || typeof document.name!=='string' || !/\.(pdf|docx|txt|md)$/i.test(document.name) || typeof document.data!=='string' || !/^data:[^,]*;base64,[A-Za-z0-9+/]*={0,2}$/.test(document.data))throw new HttpError(400,'Documento inválido.');
+    const encoded=document.data.slice(document.data.indexOf(',')+1);
+    if(Buffer.from(encoded,'base64').length>2*1024*1024)throw new HttpError(413,'El documento debe pesar como máximo 2 MB.');
+    snapshot.document={name:document.name.slice(0,255),data:document.data};
+  }else if(current?.snapshot.document) snapshot.document=current.snapshot.document;
+  // Agent identifiers are persisted for the owner's next session. Access to
+  // those resources is still checked independently by the team API.
+  for(const field of ['remoteId','runId','teamId']) {
+    const value=current && current.owner_id!==user.id ? current.snapshot[field] : input[field] || current?.snapshot[field];
+    if(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))snapshot[field]=value;
+  }
+  const synced=current && current.owner_id!==user.id ? current.snapshot.syncedMemberIds : input.syncedMemberIds || current?.snapshot.syncedMemberIds;
+  if(Array.isArray(synced))snapshot.syncedMemberIds=synced.filter(id=>typeof id==='string'&&id.length<=100).slice(0,100);
   // Preserve members who accepted an invitation, even if the owner's local snapshot is older.
   current?.snapshot.members.filter(member => member.userId && !snapshot.members.some(m => m.id === member.id)).forEach(member => snapshot.members.push(member));
   if (!snapshot.members.some(member => member.userId === user.id) && !current) snapshot.members.push({ id: crypto.randomUUID(), name: user.name, userId: user.id, email: user.email, initials: user.name[0], color: 'var(--primary)', role: 'Propietario', skills: [], weeklyHours: 20 });
-  if (JSON.stringify(snapshot).length > 1_000_000) throw new HttpError(413, 'El proyecto es demasiado grande para compartir.');
+  if (JSON.stringify({...snapshot,document:undefined}).length > 1_000_000) throw new HttpError(413, 'El proyecto es demasiado grande para compartir.');
   return snapshot;
 }
 async function acceptInvitation(token, user) {

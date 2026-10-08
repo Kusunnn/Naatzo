@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { KanbanTask } from "../contexts/ProjectContext";
+const AGENT_BASE_URL=`${API_BASE_URL}/team`;
 
 // Contract from Naatzo_Backendasdasd.pdf. Models and provider keys stay on the server.
 export type AgentId = "analyst" | "planner" | "devops" | "notifier";
@@ -47,7 +48,7 @@ interface BoardTask {
 }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem("naatzo-token");
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${AGENT_BASE_URL}${path}`, {
     ...options,
     headers: {
       ...(options.body instanceof FormData
@@ -89,14 +90,15 @@ export const agentApi = {
     description: string;
     teamId: string;
     inputText: string;
+    file?: File;
   }) =>
     request<{ project: { id: string } }>("/projects", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data.file ? (() => {const form=new FormData();form.append('name',data.name);form.append('teamId',data.teamId);form.append('file',data.file);return form;})() : JSON.stringify(data),
     }),
   upload: (id: string, file: File) => {
     const form = new FormData();
-    form.append("document", file);
+    form.append("file", file);
     return request(`/projects/${encodeURIComponent(id)}/document`, {
       method: "POST",
       body: form,
@@ -107,8 +109,11 @@ export const agentApi = {
       method: "POST",
       body: JSON.stringify({ requireApproval: true }),
     }),
-  run: (id: string, signal?: AbortSignal) =>
-    request<Run>(`/runs/${encodeURIComponent(id)}`, { signal }),
+  run: async (id: string, signal?: AbortSignal) => {
+    const result=await request<{run:Run;steps:AgentStep[]}>(`/runs/${encodeURIComponent(id)}`, {signal});
+    return {...result.run,steps:result.steps};
+  },
+  integrations: () => request<{integrations:{llm:{mode:string}}}>('/health/integrations'),
   approve: (id: string) =>
     request(`/runs/${encodeURIComponent(id)}/approve`, { method: "POST" }),
   retry: (id: string, from: AgentId) =>
@@ -118,9 +123,9 @@ export const agentApi = {
     }),
   cancel: (id: string) =>
     request(`/runs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
-  board: (id: string) =>
-    request<{
-      columns: { key: string; tasks: BoardTask[] }[];
+  board: async (id: string) => {
+    const result=await request<{
+      lists: { stage: string; cards: (BoardTask & {checklist?:{total:number}})[] }[];
       workload?: {
         memberId: string;
         name: string;
@@ -128,7 +133,14 @@ export const agentApi = {
         capacityHours: number;
         percent: number;
       }[];
-    }>(`/projects/${encodeURIComponent(id)}/board`),
+    }>(`/projects/${encodeURIComponent(id)}/board`);
+    const columns=await Promise.all(result.lists.map(async list=>({key:list.stage,tasks:await Promise.all(list.cards.map(async card=>{
+      if(!card.checklist?.total)return card;
+      const detail=await request<{task:{checklistItems:{id:string;text:string;done:boolean}[]}}>(`/tasks/${encodeURIComponent(card.id)}`);
+      return {...card,acceptanceCriteria:detail.task.checklistItems.map(item=>({id:item.id,title:item.text,completed:item.done}))};
+    }))})));
+    return {columns,workload:result.workload};
+  },
   environment: (id: string) =>
     request<{ repoUrl?: string; files?: (string | { path: string })[] }>(
       `/projects/${encodeURIComponent(id)}/environment`,
@@ -181,7 +193,7 @@ export async function streamRun(
 ) {
   const token = sessionStorage.getItem("naatzo-token");
   const response = await fetch(
-    `${API_BASE_URL}/runs/${encodeURIComponent(id)}/events`,
+    `${AGENT_BASE_URL}/runs/${encodeURIComponent(id)}/events`,
     {
       signal,
       headers: {

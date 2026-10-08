@@ -4,6 +4,9 @@ const API_BASE_URL =
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {super(message);}
+}
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
@@ -28,7 +31,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     } catch {
       // Keep default message when body is not json.
     }
-    throw new Error(message);
+    throw new ApiError(message,response.status);
   }
 
   if (response.status === 204) {

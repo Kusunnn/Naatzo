@@ -38,7 +38,7 @@ export function Projects() {
       if (file && inputMode === "document") {
         if (file.size > 2 * 1024 * 1024)
           throw new Error(
-            "Para guardar localmente, el documento debe pesar como máximo 2 MB.",
+            "El documento debe pesar como máximo 2 MB.",
           );
         if (!/\.(pdf|docx|txt|md)$/i.test(file.name))
           throw new Error("Usa un documento PDF, DOCX, TXT o Markdown.");

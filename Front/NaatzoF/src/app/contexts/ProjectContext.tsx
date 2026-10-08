@@ -3,11 +3,12 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
 import { tasksProgress } from "../services/projectProgress";
-import { apiRequest } from '../services/api';
+import { apiRequest, ApiError } from '../services/api';
 
 export type KanbanColumn = "todo" | "in-progress" | "review" | "done";
 export interface TeamMember {
@@ -39,6 +40,8 @@ export interface KanbanTask {
   acceptanceCriteria?: AcceptanceCriterion[];
 }
 export interface Project {
+  syncRevision?: number;
+  syncPending?: boolean;
   sharedId?: string;
   ownerUserId?: string;
   sharedVersion?: number;
@@ -92,6 +95,8 @@ function load(key: string): Project[] {
   }
 }
 interface ContextValue {
+  syncStatus: Record<string,{state: 'saving' | 'saved' | 'error' | 'conflict'; message: string}>;
+  retrySync: (id: string) => void;
   importShared: (project: Project, localId?: string) => string;
   projects: Project[];
   addProject: (
@@ -116,18 +121,27 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const key = `naatzo-projects-v1-${user?.id || "guest"}`;
   const [store, setStore] = useState(() => ({ key, projects: load(key) }));
   const [storageError, setStorageError] = useState("");
+  const [syncStatus,setSyncStatus] = useState<ContextValue['syncStatus']>({});
+  const inFlight = useRef(new Set<string>());
+  const currentKey = useRef(key);
+  currentKey.current = key;
   const projects = store.key === key ? store.projects : load(key);
   useEffect(() => {
     setStore({ key, projects: load(key) });
     setStorageError("");
+    setSyncStatus({});
     let active = true;
     if (user && sessionStorage.getItem('naatzo-token')) {
       apiRequest<{projects: Project[]}>('/collaboration/projects').then(result => {
         if (!active || !Array.isArray(result.projects)) return;
         setStore(prev => {
           const local = prev.key === key ? prev.projects : load(key);
-          const additions = result.projects.filter(p => !local.some(existing => existing.sharedId === p.sharedId)).map(p => ({...p, createdAt:new Date(p.createdAt),tasks:p.tasks.map(t => ({...t,dueDate:t.dueDate?new Date(t.dueDate):undefined}))}));
-          const next = [...local,...additions];
+          const parse = (p: Project) => ({...p,syncPending:false,createdAt:new Date(p.createdAt),tasks:p.tasks.map(t=>({...t,dueDate:t.dueDate?new Date(t.dueDate):undefined}))});
+          const next = local.map(p => {
+            const remote = result.projects.find(r => r.sharedId === p.sharedId || r.id === p.id);
+            return remote && !p.syncPending && (remote.sharedVersion||0)>=(p.sharedVersion||0) ? {...p,...parse(remote),id:p.id,tasks:parse(remote).tasks.map(t=>({...t,projectId:p.id}))} : p;
+          });
+          next.push(...result.projects.filter(p=>!local.some(existing=>existing.sharedId===p.sharedId||existing.id===p.id)).map(parse));
           try {localStorage.setItem(key,JSON.stringify(next));} catch {setStorageError('No se pudo guardar el proyecto compartido en este navegador.');}
           return {key,projects:next};
         });
@@ -137,7 +151,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [key]);
   const save = (fn: (prev: Project[]) => Project[]) =>
     setStore((prev) => {
-      const next = fn(prev.key === key ? prev.projects : load(key));
+      const previous = prev.key === key ? prev.projects : load(key);
+      const next = fn(previous).map(p => {
+        const old = previous.find(item=>item.id===p.id);
+        return old===p ? p : {...p,syncPending:true,syncRevision:(old?.syncRevision||0)+1};
+      });
       try {
         localStorage.setItem(key, JSON.stringify(next));
         setStorageError("");
@@ -152,10 +170,52 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     save((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   const importShared = (project: Project, localId?: string) => {
     const id = localId || projects.find(p => p.sharedId === project.sharedId)?.id || project.id;
-    const parsed = { ...project, id, createdAt: new Date(project.createdAt), tasks: project.tasks.map(t => ({...t, projectId: id, dueDate: t.dueDate ? new Date(t.dueDate) : undefined})) };
-    save(ps => ps.some(p => p.id === id) ? ps.map(p => p.id === id ? {...p,...parsed} : p) : [...ps,parsed]);
+    const parsed = { ...project, id,syncPending:false, createdAt: new Date(project.createdAt), tasks: project.tasks.map(t => ({...t, projectId: id, dueDate: t.dueDate ? new Date(t.dueDate) : undefined})) };
+    setStore(prev => {
+      if(prev.key!==key)return prev;
+      const next=prev.projects.some(p=>p.id===id)?prev.projects.map(p=>p.id===id?{...p,...parsed}:p):[...prev.projects,parsed];
+      try {localStorage.setItem(key,JSON.stringify(next));} catch {setStorageError('No se pudo guardar la copia local del proyecto.');}
+      return {key,projects:next};
+    });
+    setSyncStatus(status=>({...status,[id]:{state:'saved',message:'Guardado en el servidor'}}));
     return id;
   };
+  const retrySync = (id:string) => {
+    setSyncStatus(status=>{const next={...status};delete next[id];return next;});
+    setStore(prev=>({...prev,projects:prev.projects.map(p=>p.id===id?{...p,syncPending:true}:p)}));
+  };
+  useEffect(() => {
+    if(!user || store.key!==key || !sessionStorage.getItem('naatzo-token'))return;
+    const timer=setTimeout(()=>{
+      for(const project of store.projects) {
+        const flightKey=`${key}:${project.id}`;
+        if((!project.syncPending && project.sharedId) || inFlight.current.has(flightKey) || ['error','conflict'].includes(syncStatus[project.id]?.state))continue;
+        inFlight.current.add(flightKey);
+        setSyncStatus(status=>({...status,[project.id]:{state:'saving',message:'Guardando en el servidor...'}}));
+        apiRequest<{project:Project}>(project.sharedId?`/collaboration/projects/${project.sharedId}`:'/collaboration/projects',{method:project.sharedId?'PATCH':'POST',body:project}).then(({project:remote})=>{
+          if(!remote?.sharedId || !Array.isArray(remote.tasks) || !Array.isArray(remote.members))throw new Error('El backend devolvió una respuesta de proyecto inválida.');
+          if(currentKey.current!==key)return;
+          setStore(prev=>{
+            if(prev.key!==key)return prev;
+            const next=prev.projects.map(latest=>{
+              if(latest.id!==project.id)return latest;
+              const metadata={sharedId:remote.sharedId,ownerUserId:remote.ownerUserId,sharedVersion:remote.sharedVersion};
+              if(!project.sharedId)return {...latest,...metadata,members:[...latest.members,...remote.members.filter(m=>!latest.members.some(existing=>existing.id===m.id))],syncPending:true};
+              if(latest.syncRevision!==project.syncRevision)return {...latest,...metadata,syncPending:true};
+              return {...latest,...remote,...metadata,id:latest.id,syncPending:false,createdAt:new Date(remote.createdAt),tasks:remote.tasks.map(t=>({...t,projectId:latest.id,dueDate:t.dueDate?new Date(t.dueDate):undefined}))};
+            });
+            try {localStorage.setItem(key,JSON.stringify(next));} catch {setStorageError('El proyecto se guardó en el servidor, pero no pudo actualizarse la copia local.');}
+            return {key,projects:next};
+          });
+          setSyncStatus(status=>({...status,[project.id]:{state:'saved',message:'Guardado en el servidor'}}));
+        }).catch(error=>{
+          if(currentKey.current!==key)return;
+          setSyncStatus(status=>({...status,[project.id]:{state:error instanceof ApiError&&error.status===409?'conflict':'error',message:error.message||'No se pudo guardar. Los cambios siguen en este navegador.'}}));
+        }).finally(()=>{inFlight.current.delete(flightKey);});
+      }
+    },600);
+    return ()=>clearTimeout(timer);
+  },[store,key,user?.id,syncStatus]);
   const addProject: ContextValue["addProject"] = (data) => {
     const id = crypto.randomUUID();
     save((ps) => [...ps, { ...data, id, createdAt: new Date(), tasks: [] }]);
@@ -236,6 +296,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         projects,
+        syncStatus,
+        retrySync,
         importShared,
         addProject,
         updateProject,
