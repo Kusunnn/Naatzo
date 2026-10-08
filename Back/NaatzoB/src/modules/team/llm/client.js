@@ -129,8 +129,10 @@ async function generateStructured({
   ctx,
   temperature = 0.2,
   maxOutputTokens = 4096,
+  allowMock = true,
 }) {
   if (env.LLM_MOCK) {
+    if (!allowMock) throw new Error('Este análisis requiere IA real; no se permite sustituir el documento por datos demo.');
     // Pausa corta para que en la demo se vea avanzar a cada agente por SSE.
     await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
     return useMock({ mockKey, mockInput, zodSchema, ctx, label: "mock" });
@@ -162,7 +164,7 @@ async function generateStructured({
       }
       // Respaldo para la demo: si no hay internet o Gemini no responde, se
       // usa la respuesta fija en lugar de tirar la ejecucion.
-      if (env.LLM_PROVIDER === "gemini" && env.DEMO_MODE && mock.has(mockKey)) {
+      if (allowMock && env.LLM_PROVIDER === "gemini" && env.DEMO_MODE && mock.has(mockKey)) {
         console.warn(`[llm] ${describeHttpError(err, currentModel)}. Se usa la respuesta mock de respaldo.`);
         return useMock({ mockKey, mockInput, zodSchema, ctx, label: "mock-respaldo" });
       }

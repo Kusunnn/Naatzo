@@ -62,6 +62,7 @@ const PlanTaskSchema = z.object({
   estimateHours: z.number().min(1).max(16),
   priority: z.enum(["high", "medium", "low"]),
   dependsOn: z.array(z.string()).default([]),
+  acceptanceCriteria: z.array(z.string().trim().min(5).max(300)).min(2).max(5),
   mentionedOwner: z.string().nullable().default(null),
 });
 
@@ -101,6 +102,7 @@ function planGemini(skills) {
               estimateHours: { type: "NUMBER", minimum: 1, maximum: 16 },
               priority: { type: "STRING", format: "enum", enum: ["high", "medium", "low"] },
               dependsOn: { ...arrayOf(S), description: "Claves de las tareas de las que depende" },
+              acceptanceCriteria: { ...arrayOf(S), minItems: 2, maxItems: 5, description: "Condiciones concretas y verificables para aceptar la tarea" },
               mentionedOwner: nullableS,
             }),
           ),

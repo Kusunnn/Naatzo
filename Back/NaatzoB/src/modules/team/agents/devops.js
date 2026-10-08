@@ -82,13 +82,14 @@ async function run(input, ctx) {
   // 3) Repositorio en GitHub; si no se puede, queda el ZIP
   let repoUrl = null;
   let gh;
-  if (!github.isConfigured()) {
+  if (!github.isConfigured(input.ownerUserId)) {
     gh = { status: "skipped", reason: "GITHUB_TOKEN o GITHUB_OWNER no estan configurados" };
     console.warn(`[devops] ${gh.reason}; se deja el ZIP para descargar`);
   } else {
     ctx.progress(`Creando el repositorio ${slug} en GitHub`);
     try {
       const result = await github.publishRepo({
+        userId: input.ownerUserId,
         name: slug,
         fallbackName: `${slug}-${projectId.slice(0, 6)}`,
         description: analysis.objective,

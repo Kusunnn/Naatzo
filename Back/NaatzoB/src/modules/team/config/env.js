@@ -51,6 +51,7 @@ const schema = z.object({
 
   // GitHub
   GITHUB_TOKEN: z.string().optional(),
+  GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_OWNER: z.string().optional(),
   GITHUB_OWNER_TYPE: z.enum(["org", "user"]).default("org"),
 

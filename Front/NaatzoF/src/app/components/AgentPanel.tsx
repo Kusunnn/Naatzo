@@ -19,6 +19,7 @@ import {
   normalizeBoard,
   streamRun,
 } from "../services/agents";
+import { GithubConnection } from './GithubConnection';
 import { isSelfParticipant } from '../services/projectProgress';
 
 const agents: { id: AgentId; title: string; description: string }[] = [
@@ -60,6 +61,7 @@ export function AgentPanel({ project }: { project: Project }) {
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<Partial<Record<AgentId, string>>>({});
   const [streamRevision, setStreamRevision] = useState(0);
   const [llmMode, setLlmMode] = useState<string>();
   useEffect(() => {
@@ -103,6 +105,7 @@ export function AgentPanel({ project }: { project: Project }) {
   }
   useEffect(() => {
     setRun(undefined);
+    setProgress({});
     setSteps([]);
     setEnvironment(undefined);
     setWorkload(undefined);
@@ -123,6 +126,9 @@ export function AgentPanel({ project }: { project: Project }) {
     streamRun(
       project.runId,
       (event) => {
+        if (event.type === "progress" && event.agent && event.message) {
+          setProgress(previous => ({...previous, [event.agent!]: event.message}));
+        }
         if (event.type === "step" && event.agent) {
           const step = {
             agent: event.agent,
@@ -267,6 +273,7 @@ export function AgentPanel({ project }: { project: Project }) {
         </p>
         {llmMode === 'mock' && <p role="status" className="text-sm p-3 mb-4 bg-secondary rounded-xl">Modo de demostración: los agentes generan ejemplos. Falta configurar la clave de IA en el servidor para analizar tu proyecto con el modelo real.</p>}
         {llmMode === 'unavailable' && <p role="status" className="team-error">No se pudo comprobar la conexión con los agentes.</p>}
+        <GithubConnection />
         {agents.map((a) => {
           const step = steps.find((s) => s.agent === a.id);
           return (
@@ -288,8 +295,8 @@ export function AgentPanel({ project }: { project: Project }) {
                   </span>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {step?.summary || step?.error || a.description}
+              <p className="text-sm text-muted-foreground mt-1" aria-live="polite">
+                {step?.status === "started" ? progress[a.id] || step.summary || a.description : step?.summary || step?.error || a.description}
               </p>
             </div>
           );

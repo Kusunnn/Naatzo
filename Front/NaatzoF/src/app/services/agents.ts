@@ -28,6 +28,7 @@ export interface Run {
   error?: string;
 }
 export interface AgentEvent {
+  message?: string;
   type: string;
   agent?: AgentId;
   status?: AgentStep["status"];
@@ -67,6 +68,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.status === 204 ? (undefined as T) : response.json();
 }
 export const agentApi = {
+  githubStatus: () => request<{available:boolean;connected:boolean;login:string|null}>('/integrations/github'),
+  connectGithub: () => request<{userCode:string;verificationUrl:string;expiresIn:number}>('/integrations/github/connect',{method:'POST'}),
+  completeGithub: () => request<{pending:boolean;message?:string;connected?:boolean;login?:string}>('/integrations/github/complete',{method:'POST'}),
+  disconnectGithub: () => request('/integrations/github',{method:'DELETE'}),
   createTeam: (name: string) =>
     request<{ team: { id: string } }>("/teams", {
       method: "POST",
@@ -126,7 +131,7 @@ export const agentApi = {
     request(`/runs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   board: async (id: string) => {
     const result=await request<{
-      lists: { stage: string; cards: (BoardTask & {checklist?:{total:number}})[] }[];
+      lists: { stage: string; title: string; cards: (BoardTask & {checklist?:{total:number}})[] }[];
       workload?: {
         memberId: string;
         name: string;
@@ -135,7 +140,7 @@ export const agentApi = {
         percent: number;
       }[];
     }>(`/projects/${encodeURIComponent(id)}/board`);
-    const columns=await Promise.all(result.lists.map(async list=>({key:list.stage,tasks:await Promise.all(list.cards.map(async card=>{
+    const columns=await Promise.all(result.lists.map(async list=>({key:list.stage === 'todo' && list.title === 'Primeras tareas' ? 'first-tasks' : list.stage,tasks:await Promise.all(list.cards.map(async card=>{
       if(!card.checklist?.total)return card;
       const detail=await request<{task:{checklistItems:{id:string;text:string;done:boolean}[]}}>(`/tasks/${encodeURIComponent(card.id)}`);
       return {...card,acceptanceCriteria:detail.task.checklistItems.map(item=>({id:item.id,title:item.text,completed:item.done}))};
@@ -161,6 +166,7 @@ export function normalizeBoard(
   };
   const columnMap: Record<string, KanbanTask["column"]> = {
     todo: "todo",
+    "first-tasks": "first-tasks",
     in_progress: "in-progress",
     "in-progress": "in-progress",
     review: "review",

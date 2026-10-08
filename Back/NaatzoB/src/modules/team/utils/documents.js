@@ -10,9 +10,10 @@ const multer = require("multer");
 const { PDFParse } = require("pdf-parse");
 const mammoth = require("mammoth");
 const { HttpError } = require("./http");
+const { MAX_INPUT_CHARS, CHUNK_CHARS, splitText } = require('./textChunks');
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-const MAX_CHARS = 30_000; // lo mismo que acepta el Analista
+const MAX_CHARS = MAX_INPUT_CHARS;
 const MIN_CHARS = 20;
 
 const FORMATS = {
@@ -128,12 +129,12 @@ async function extractText(file) {
     );
   }
 
-  // El Analista lee hasta 30,000 caracteres; lo demas se corta y se avisa.
+  // No enviar un documento incompleto al Analista como si lo hubiera leído entero.
   const chars = text.length;
   const truncated = chars > MAX_CHARS;
-  if (truncated) text = text.slice(0, MAX_CHARS);
+  if (truncated) throw new HttpError(422, `El documento tiene ${chars} caracteres y supera el límite de ${MAX_CHARS}. Divide el archivo para analizarlo completo; no se ha iniciado el análisis.`);
 
-  return { text, format, filename: file.originalname, pages: result.pages ?? null, chars, truncated };
+  return { text, format, filename: file.originalname, pages: result.pages ?? null, chars, truncated, chunks: splitText(text, CHUNK_CHARS).length };
 }
 
 module.exports = { receiveFile, extractText, MAX_BYTES, MAX_CHARS };

@@ -24,9 +24,6 @@ const EXCLUDE = {
   database: [],
 };
 
-// Valores por defecto cuando la minuta no menciona una parte del stack.
-const DEFAULTS = { backend: "node-express", database: "postgres" };
-
 const PART_LABEL = { frontend: "el frontend", backend: "el backend", database: "la base de datos" };
 
 function clean(text) {
@@ -58,12 +55,7 @@ function normalizeStack(stack) {
 
   for (const part of ["frontend", "backend", "database"]) {
     const key = normalizePart(part, stack[part] || "");
-    if (key === null && DEFAULTS[part]) {
-      result[part] = DEFAULTS[part];
-      questions.push(
-        `No se menciona ${PART_LABEL[part]}; se usa ${label(part, DEFAULTS[part])} por defecto`,
-      );
-    } else if (key === "generic") {
+    if (key === "generic") {
       result[part] = "generic";
       questions.push(
         `"${stack[part]}" no tiene plantilla para ${PART_LABEL[part]}; se genera una estructura generica`,
