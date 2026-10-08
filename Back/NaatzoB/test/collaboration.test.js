@@ -23,6 +23,14 @@ app.use(require('../src/middleware/errorHandler').errorHandler);
 const owner = {id:'00000000-0000-4000-8000-000000000001',name:'Ana',email:'ana@example.com'};
 const member = {id:'00000000-0000-4000-8000-000000000002',name:'Luis',email:'luis@example.com'};
 
+test('first tasks can be saved without treating them as completed', () => {
+  const task = {id:'first-task',title:'Preparar el proyecto',column:'first-tasks',priority:'alta',assigneeId:'',acceptanceCriteria:[{id:'criterion',title:'Revisar requisitos',completed:false}]};
+  const snapshot = service.cleanSnapshot({title:'Tablero',members:[],tasks:[task]},owner);
+  assert.equal(snapshot.tasks[0].column,'first-tasks');
+  assert.equal(service.view({id:'project',owner_id:owner.id,version:1,snapshot}).tasks[0].column,'first-tasks');
+  assert.throws(()=>service.cleanSnapshot({title:'Tablero',members:[],tasks:[{...task,column:'invalid'}]},owner),/Actividad inválida/);
+});
+
 test('invitation permissions, acceptance, revocation and conflicting saves', async t => {
   await pool.query('CREATE TABLE naatzo_users(id UUID PRIMARY KEY,name TEXT,email TEXT)');
   for(const user of [owner,member])await pool.query('INSERT INTO naatzo_users VALUES($1,$2,$3)',[user.id,user.name,user.email]);

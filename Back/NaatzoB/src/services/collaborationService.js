@@ -52,7 +52,7 @@ function cleanSnapshot(input, user, current) {
   }
   const taskIds = new Set();
   for (const task of input.tasks) {
-    if (!task || typeof task.id !== 'string' || !task.id || taskIds.has(task.id) || typeof task.title !== 'string' || !task.title.trim() || !['todo','in-progress','review','done'].includes(task.column) || !['alta','media','baja'].includes(task.priority) || (task.assigneeId && !ids.has(task.assigneeId)) || (task.dueDate && Number.isNaN(new Date(task.dueDate).getTime()))) throw new HttpError(400, 'Actividad inválida o duplicada.');
+    if (!task || typeof task.id !== 'string' || !task.id || taskIds.has(task.id) || typeof task.title !== 'string' || !task.title.trim() || !['todo','first-tasks','in-progress','review','done'].includes(task.column) || !['alta','media','baja'].includes(task.priority) || (task.assigneeId && !ids.has(task.assigneeId)) || (task.dueDate && Number.isNaN(new Date(task.dueDate).getTime()))) throw new HttpError(400, 'Actividad inválida o duplicada.');
     taskIds.add(task.id);
     if (task.acceptanceCriteria !== undefined) {
       const criteriaIds = new Set();

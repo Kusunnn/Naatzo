@@ -10,7 +10,7 @@ import { useAuth } from "./AuthContext";
 import { tasksProgress } from "../services/projectProgress";
 import { apiRequest, ApiError } from '../services/api';
 
-export type KanbanColumn = "todo" | "in-progress" | "review" | "done";
+export type KanbanColumn = "todo" | "first-tasks" | "in-progress" | "review" | "done";
 export interface TeamMember {
   id: string;
   name: string;
@@ -59,6 +59,7 @@ export interface Project {
 }
 export const columns: { key: KanbanColumn; label: string }[] = [
   { key: "todo", label: "Por hacer" },
+  { key: "first-tasks", label: "Primeras tareas" },
   { key: "in-progress", label: "En progreso" },
   { key: "review", label: "En revisión" },
   { key: "done", label: "Completado" },
