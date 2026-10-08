@@ -95,6 +95,7 @@ function load(key: string): Project[] {
   }
 }
 interface ContextValue {
+  deleteProject: (id:string)=>Promise<void>;
   syncStatus: Record<string,{state: 'saving' | 'saved' | 'error' | 'conflict'; message: string}>;
   retrySync: (id: string) => void;
   importShared: (project: Project, localId?: string) => string;
@@ -123,6 +124,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [storageError, setStorageError] = useState("");
   const [syncStatus,setSyncStatus] = useState<ContextValue['syncStatus']>({});
   const inFlight = useRef(new Set<string>());
+  const deleting = useRef(new Set<string>());
   const currentKey = useRef(key);
   currentKey.current = key;
   const projects = store.key === key ? store.projects : load(key);
@@ -135,7 +137,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       apiRequest<{projects: Project[]}>('/collaboration/projects').then(result => {
         if (!active || !Array.isArray(result.projects)) return;
         setStore(prev => {
-          const local = prev.key === key ? prev.projects : load(key);
+          result.projects=result.projects.filter(p=>!deleting.current.has(`${key}:${p.id}`));
+          const local = (prev.key === key ? prev.projects : load(key)).filter(p=>!deleting.current.has(`${key}:${p.id}`)&&(!p.sharedId||p.syncPending||result.projects.some(remote=>remote.sharedId===p.sharedId)));
           const parse = (p: Project) => ({...p,syncPending:false,createdAt:new Date(p.createdAt),tasks:p.tasks.map(t=>({...t,dueDate:t.dueDate?new Date(t.dueDate):undefined}))});
           const next = local.map(p => {
             const remote = result.projects.find(r => r.sharedId === p.sharedId || r.id === p.id);
@@ -168,6 +171,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   const updateProject = (id: string, patch: Partial<Project>) =>
     save((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const deleteProject: ContextValue['deleteProject'] = async(id)=>{
+    const project=projects.find(p=>p.id===id);
+    if(!project)return;
+    if(inFlight.current.has(`${key}:${id}`))throw new Error('Espera a que termine el guardado antes de eliminar el proyecto.');
+    deleting.current.add(`${key}:${id}`);
+    try {
+    if(user&&sessionStorage.getItem('naatzo-token')){
+      try{await apiRequest(`/collaboration/projects/${project.sharedId||project.id}`,{method:'DELETE'});}
+      catch(error){if(project.sharedId||!(error instanceof ApiError)||error.status!==404)throw error;}
+    }else if(project.sharedId)throw new Error('Inicia sesión para eliminar el proyecto compartido.');
+    if(currentKey.current!==key)return;
+    save(ps=>ps.filter(p=>p.id!==id));
+    setSyncStatus(status=>{const next={...status};delete next[id];return next;});
+    }catch(error){deleting.current.delete(`${key}:${id}`);setStore(prev=>({...prev}));throw error;}
+  };
   const importShared = (project: Project, localId?: string) => {
     const id = localId || projects.find(p => p.sharedId === project.sharedId)?.id || project.id;
     const parsed = { ...project, id,syncPending:false, createdAt: new Date(project.createdAt), tasks: project.tasks.map(t => ({...t, projectId: id, dueDate: t.dueDate ? new Date(t.dueDate) : undefined})) };
@@ -189,7 +207,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const timer=setTimeout(()=>{
       for(const project of store.projects) {
         const flightKey=`${key}:${project.id}`;
-        if((!project.syncPending && project.sharedId) || inFlight.current.has(flightKey) || ['error','conflict'].includes(syncStatus[project.id]?.state))continue;
+        if(deleting.current.has(flightKey) || (!project.syncPending && project.sharedId) || inFlight.current.has(flightKey) || ['error','conflict'].includes(syncStatus[project.id]?.state))continue;
         inFlight.current.add(flightKey);
         setSyncStatus(status=>({...status,[project.id]:{state:'saving',message:'Guardando en el servidor...'}}));
         apiRequest<{project:Project}>(project.sharedId?`/collaboration/projects/${project.sharedId}`:'/collaboration/projects',{method:project.sharedId?'PATCH':'POST',body:project}).then(({project:remote})=>{
@@ -296,6 +314,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         projects,
+        deleteProject,
         syncStatus,
         retrySync,
         importShared,

@@ -13,6 +13,7 @@ import "./team.css";
 import { MetricCard } from "./MetricCard";
 import { useAuth } from '../contexts/AuthContext';
 import { isSelfParticipant } from '../services/projectProgress';
+import { parseParticipants } from '../services/participantInput';
 
 export function Projects() {
   const {user}=useAuth();
@@ -50,10 +51,9 @@ export function Projects() {
         });
         document = { name: file.name, data };
       }
-      const members = names.split(/[,\n]/).filter(n=>n.trim()).map((entry,index)=>{
-        const [label,...roleParts]=entry.split(/\s*:\s*|\s+-\s+/);
+      const members = parseParticipants(names).map(({name:label,role},index)=>{
         const name=isSelfParticipant(label)&&user?user.name:label.trim();
-        const member={...makeMember(name,index),role:roleParts.join(' - ').trim()||'Integrante'};
+        const member={...makeMember(name,index),role};
         return user&&name.toLowerCase()===user.name.trim().toLowerCase()?{...member,userId:user.id,email:user.email}:member;
       }).filter((member,index,all)=>member.name&&all.findIndex(m=>m.name.toLowerCase()===member.name.toLowerCase())===index);
       const id = addProject({
@@ -258,7 +258,7 @@ export function Projects() {
                   </label>
                 <label>
                   Integrantes y roles (opcionales)
-                  <span className="text-xs text-muted-foreground">Escribe “yo” para incluir tu cuenta. Después pulsa el avatar de cada integrante para invitarlo.</span>
+                  <span className="text-xs text-muted-foreground">Separa nombres con “y”, comas o saltos de línea. Escribe “yo” para incluir tu cuenta. Los roles son opcionales.</span>
                   <textarea
                     aria-label="Integrantes y roles"
                     rows={2}

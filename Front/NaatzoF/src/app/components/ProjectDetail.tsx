@@ -23,9 +23,11 @@ import { AgentPanel } from "./AgentPanel";
 import { ProjectInvitations } from './ProjectInvitations';
 import { ProjectSaveStatus } from './ProjectSaveStatus';
 import { ParticipantActions } from './ParticipantActions';
+import { DeleteProjectButton } from './DeleteProjectButton';
 import { AcceptanceChecklist } from "./AcceptanceChecklist";
 import { useAuth } from "../contexts/AuthContext";
 import { myMemberId, isSelfParticipant } from "../services/projectProgress";
+import { parseParticipants } from '../services/participantInput';
 import "./team.css";
 
 export function ProjectDetail() {
@@ -131,12 +133,15 @@ export function ProjectDetail() {
                 "Proyecto creado desde un documento. Los detalles y los integrantes se completarán al analizarlo."}
             </p>
           </div>
+          <div className="flex flex-wrap gap-3">
+          <DeleteProjectButton project={project}/>
           <Link
             to={`/team-calendar?project=${encodeURIComponent(project.id)}`}
             className="team-button"
           >
             <CalendarDays size={17} /> Entregas
           </Link>
+          </div>
         </header>
         <ProjectSaveStatus project={project} />
         <div className="flex gap-4 items-center">
@@ -405,33 +410,23 @@ export function ProjectDetail() {
                 className="flex gap-2 mb-5"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const name = newMember.trim();
-                  if(isSelfParticipant(name)&&user){
-                    const existing=myMemberId(project,user);
-                    if(existing){setSelectedMemberId(existing);setNewMember('');return;}
-                    updateProject(project.id,{members:[...project.members,{...makeMember(user.name,project.members.length),userId:user.id,email:user.email}]});
-                    setNewMember('');return;
+                  const members=[...project.members];
+                  for(const entry of parseParticipants(newMember)){
+                    const self=isSelfParticipant(entry.name)&&user;
+                    const name=self?user.name:entry.name;
+                    if(self){const existing=myMemberId({...project,members},user);if(existing){setSelectedMemberId(existing);continue;}}
+                    if(members.some(m=>m.name.toLowerCase()===name.toLowerCase()))continue;
+                    const member={...makeMember(name,members.length),role:entry.role};
+                    members.push(self?{...member,userId:user.id,email:user.email}:member);
                   }
-                  if (
-                    !name ||
-                    project.members.some(
-                      (m) => m.name.toLowerCase() === name.toLowerCase(),
-                    )
-                  )
-                    return;
-                  updateProject(project.id, {
-                    members: [
-                      ...project.members,
-                      makeMember(name, project.members.length),
-                    ],
-                  });
+                  if(members.length!==project.members.length)updateProject(project.id,{members});
                   setNewMember("");
                 }}
               >
                 <input
                   className="team-filter min-w-0 flex-1"
                   aria-label="Nombre del nuevo integrante"
-                  placeholder="Nombre del integrante"
+                  placeholder="Ej. Fátima y Mario"
                   value={newMember}
                   onChange={(e) => setNewMember(e.target.value)}
                   maxLength={100}

@@ -82,4 +82,8 @@ test('invitation permissions, acceptance, revocation and conflicting saves', asy
   assert.equal(joined.data.project.members.find(m=>m.id==='slot-luis').userId,member.id);
   assert.equal(joined.data.project.tasks[0].assigneeId,'slot-luis');
   assert.equal((await request(`/projects/${participantProject.id}/participants/slot-ana/claim`,'member','POST')).status,409);
+  assert.equal((await request(`/projects/${participantProject.id}`,'member','DELETE')).status,404);
+  assert.equal((await request(`/projects/${participantProject.id}`,'owner','DELETE')).status,204);
+  assert.equal((await request(`/projects/${participantProject.id}`)).status,404);
+  assert.equal((await request(`/invitations/${targetedToken}`,null)).status,410);
 });

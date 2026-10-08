@@ -32,6 +32,21 @@ router.post('/projects', asyncRoute(async (req,res) => {
   res.status(result.rows.length ? 201 : 200).json({ project: service.view(row) });
 }));
 router.get('/projects/:id', asyncRoute(async (req,res) => res.json({ project: service.view(await service.readProject(req.params.id,req.user)) })));
+router.delete('/projects/:id',asyncRoute(async(req,res)=>{
+  const client=await db.getPool().connect();
+  try{
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM naatzo_shared_projects WHERE id=$1 FOR UPDATE',[req.params.id]);
+    const project=await service.readProject(req.params.id,req.user,true,client);
+    if(project.snapshot.remoteId){
+      const schema=require('../modules/team/config/env').DB_SCHEMA;
+      await client.query(`DELETE FROM ${schema}.projects WHERE id=$1 AND team_id IN (SELECT id FROM ${schema}.teams WHERE owner_id=$2)`,[project.snapshot.remoteId,req.user.id]);
+    }
+    await client.query('DELETE FROM naatzo_invitations WHERE project_id=$1',[project.id]);
+    await client.query('DELETE FROM naatzo_shared_projects WHERE id=$1',[project.id]);
+    await client.query('COMMIT');res.sendStatus(204);
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+}));
 router.post('/projects/:id/participants/:memberId/claim', asyncRoute(async (req,res)=>{
   const client=await db.getPool().connect();
   try {
